@@ -2,7 +2,7 @@
 Options -Indexes
 
 # config.php ve veritabanına doğrudan erişimi engelle
-<FilesMatch "^(config\.php|.*\.db|.*\.sqlite)$">
+<FilesMatch "^(config\.php|kisiler\.php|.*\.db|.*\.sqlite)$">
   Require all denied
 </FilesMatch>
 

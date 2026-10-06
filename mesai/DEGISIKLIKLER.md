@@ -1,3 +1,22 @@
+# XRE Mesai — 4. Kişisel Telegram Hatırlatmaları
+
+- Bot, unutanlara **özelden** yazar:
+  - **19:00'dan sonra** mesaisi hâlâ açık olana: "⏰ Ozan, mesain hâlâ açık görünüyor… Çıktıysan ⏹ Mesaiyi Sonlandır'a basmayı unutma".
+  - Uzun süre açık kalan **molaya** (çay 30 dk, tuvalet 20 dk, yemek 75 dk): "☕ Ozan, çay molan 14:49'de başladı, 40 dk oldu…".
+  - Mesajlarda "📲 Mesai uygulamasını aç" düğmesi var. Her hatırlatma kişi başına bir kez gider.
+- Kimlikler `kisiler.php` dosyasında (kullanıcı adı → sayısal ID veya @kullaniciadi). Admin panelinden
+  kişiye özel değiştirilebilir (çalışan satırındaki **Telegram** düğmesi, **TG ✓ / ⏳ / —** rozeti).
+- **Telegram kuralı:** bot bir kişiye ancak o kişi botu bir kez açıp **BAŞLAT**'a bastıysa yazabilir.
+  @kullaniciadi ile verilenlerin sayısal kimliği, kişi botu başlatınca otomatik öğrenilir
+  (`getUpdates`; 10 dk'da bir veya paneldeki **Botu Başlatanları Eşleştir** düğmesiyle).
+- Admin paneli: **Kişisel Telegram Hatırlatmaları** kartı (bot linki, deneme mesajı, gönderim kayıtları).
+- Cron önerisi güncellendi: `*/10 * * * * php /home/KULLANICI/public_html/mesai/api.php`
+  (hatırlatmalar + 20:00 raporu). Eski `0 20 * * *` satırı da çalışır ama hatırlatmalar
+  yalnızca biri uygulamayı kullanırken tetiklenir.
+- Sabah hoş geldin kutusu ve akşam 18:00 uygulama içi hatırlatma (önceki sürüm).
+
+---
+
 # XRE Mesai — 3. Bildirimler, Akşam Raporu, Konum, Yeni Arayüz
 
 ## "İnternet bağlantısı yok" şeridi (internet varken görünüyordu)

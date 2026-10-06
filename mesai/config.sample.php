@@ -50,13 +50,22 @@ $RL_PENCERE = 900;  // 15 dk
 /* ---- GÜNLÜK TOPLU RAPOR ----
    Her akşam bu saatte o günün "kim ne kadar çalıştı / mola verdi" raporu
    Telegram grubuna gider. false yazarsanız kapanır.
-   En garantili yol cPanel > Cron Jobs:  0 20 * * * php /home/KULLANICI/public_html/mesai/api.php
+   En garantili yol cPanel > Cron Jobs (10 dk'da bir):  */10 * * * * php /home/KULLANICI/public_html/mesai/api.php
    Cron yoksa da 20:00'den sonraki ilk istekte otomatik gönderilir. */
 $GUNLUK_RAPOR_SAAT = 20;
 
 /* Cron'u PHP yerine URL ile tetiklemek isterseniz uzun, rastgele bir anahtar yazın:
    https://alanadi/mesai/api.php?action=cron&anahtar=BU_ANAHTAR   (boş = kapalı) */
 $CRON_ANAHTAR = "";
+
+/* ---- KİŞİSEL HATIRLATMALAR (bot özelden yazar) ----
+   Kişi → Telegram kimliği eşleşmesi kisiler.php dosyasında (bkz. kisiler.sample.php).
+   Mesaisi bu saatte hâlâ açık olana "kapatmayı unutma" (false = kapalı): */
+$HATIRLATMA_SAAT = 19;
+/* Bu kadar dakika açık kalan molaya hatırlatma: */
+$MOLA_HATIRLATMA_DK = ["cay"=>30, "tuvalet"=>20, "yemek"=>75];
+/* Hatırlatma mesajındaki "uygulamayı aç" düğmesinin adresi: */
+$UYGULAMA_URL = "https://xrex.com.tr/mesai/";
 
 /* Teşhis: geliştirirken beklenmeyen hataların mesajını API yanıtında görmek
    isterseniz açın. CANLIDA KAPALI TUTUN. */

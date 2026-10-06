@@ -18,6 +18,14 @@ require __DIR__ . "/config.php"; // gizli ayarlar (token, webhook, admin hash)
 /* config.php'de tanımlı değilse varsayılanlar (eski config dosyaları da çalışsın) */
 $GUNLUK_RAPOR_SAAT = $GUNLUK_RAPOR_SAAT ?? 20;  // her akşam bu saatte o günün toplu raporu (false = kapalı)
 $CRON_ANAHTAR      = $CRON_ANAHTAR ?? "";       // URL ile cron tetiklemek için gizli anahtar (boş = yalnız CLI)
+/* Kişisel Telegram hatırlatmaları (özelden, bot üzerinden) */
+$HATIRLATMA_SAAT   = $HATIRLATMA_SAAT ?? 19;    // bu saatte mesaisi hâlâ açık olanlara "kapatmayı unutma" (false = kapalı)
+$MOLA_HATIRLATMA_DK = $MOLA_HATIRLATMA_DK ?? ["cay"=>30, "tuvalet"=>20, "yemek"=>75]; // bu kadar dk açık kalan molaya hatırlatma
+$UYGULAMA_URL      = $UYGULAMA_URL ?? "https://xrex.com.tr/mesai/";
+/* Kullanıcı adı → Telegram kimliği (sayısal ID veya @kullaniciadi). kisiler.php varsa oradan gelir;
+   admin panelinden kişiye özel girilen değer önceliklidir. */
+$TG_KISILER = $TG_KISILER ?? [];
+if (is_file(__DIR__ . "/kisiler.php")) require __DIR__ . "/kisiler.php";
 $CLI = (PHP_SAPI === "cli");
 ignore_user_abort(true); // yanıt gittikten sonraki arka plan işleri yarıda kalmasın
 
@@ -72,6 +80,7 @@ foreach ([
   "ALTER TABLE gunler ADD COLUMN bx_zaman INTEGER",       // hedefin son doğrulanma zamanı
   "ALTER TABLE users ADD COLUMN token_zaman INTEGER",
   "ALTER TABLE users ADD COLUMN bitrix_id INTEGER",       // kullanıcı başına Bitrix ID
+  "ALTER TABLE users ADD COLUMN tg_id TEXT",              // kişisel Telegram: sayısal ID veya @kullaniciadi
 ] as $sql) { try { $db->exec($sql); } catch (Throwable $e) {} }
 
 $db->exec("CREATE TABLE IF NOT EXISTS denemeler(
@@ -85,6 +94,13 @@ $db->exec("CREATE INDEX IF NOT EXISTS ix_bxlog_zaman ON bitrix_log(zaman DESC)")
 /* Zamanlanmış işler (günlük toplu rapor vb.) — aynı işin iki kez çalışmasını engeller */
 $db->exec("CREATE TABLE IF NOT EXISTS gorevler(
   anahtar TEXT PRIMARY KEY, durum TEXT NOT NULL, zaman INTEGER, notlar TEXT)");
+/* Botu başlatan kişilerden öğrenilen @kullaniciadi → sayısal sohbet kimliği */
+$db->exec("CREATE TABLE IF NOT EXISTS tg_kisiler(
+  kullanici TEXT PRIMARY KEY, chat_id INTEGER NOT NULL, ad TEXT, zaman INTEGER)");
+/* Kişisel hatırlatma denemeleri (admin panelinden görülür) */
+$db->exec("CREATE TABLE IF NOT EXISTS tg_log(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, zaman INTEGER, user_id INTEGER, ad TEXT,
+  tur TEXT, ok INTEGER, sebep TEXT)");
 
 /* ---- brute-force koruması ---- */
 function rlAnahtar($ek){ return sha1(($_SERVER["REMOTE_ADDR"] ?? "?") . "|" . $ek); }
@@ -315,12 +331,27 @@ function bekleyenRaporlar($db){
    20:00'den sonra hiç istek gelmediyse, ertesi sabah 12:00'ye kadar gelen ilk
    istekte bir önceki günün raporu gönderilir. */
 function arkaPlanIsleri(){
-  global $db, $GUNLUK_RAPOR_SAAT, $CLI;
+  global $db, $CLI;
   if ($CLI || !isset($db)) return;
   if (function_exists("fastcgi_finish_request")) @fastcgi_finish_request();
   elseif (function_exists("litespeed_finish_request")) @litespeed_finish_request();
+  zamanliIsler($db);
+}
+function zamanliIsler($db){
+  global $GUNLUK_RAPOR_SAAT, $TG_KISILER;
+  $sonuc = [];
+  try { bekleyenRaporlar($db); } catch (Throwable $e) {}
+  // @kullaniciadi ile girilmiş ama kimliği henüz öğrenilmemiş kişi varsa 10 dk'da bir botun gelen kutusuna bak
   try {
-    bekleyenRaporlar($db);
+    $bekleyen = false;
+    foreach ($db->query("SELECT id,kadi,tg_id FROM users WHERE aktif=1")->fetchAll(PDO::FETCH_ASSOC) as $u) {
+      $h = tgHedefBul($db, $u);
+      if (!$h["chat"] && str_starts_with($h["ham"], "@")) { $bekleyen = true; break; }
+    }
+    if ($bekleyen && gorevAl($db, "tg_eslestir", 600)) { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); }
+  } catch (Throwable $e) {}
+  try { hatirlatmalar($db); } catch (Throwable $e) {}
+  try {
     if ($GUNLUK_RAPOR_SAAT !== false) {
       $saat = (int)date("G");
       $gun = null;
@@ -329,10 +360,11 @@ function arkaPlanIsleri(){
       if ($gun) {
         $s = $db->prepare("SELECT durum FROM gorevler WHERE anahtar=?");
         $s->execute(["gunluk:$gun"]);
-        if ($s->fetchColumn() !== "tamam") gunlukRaporGonder($db, $gun);
+        if ($s->fetchColumn() !== "tamam") $sonuc["rapor"] = gunlukRaporGonder($db, $gun);
       }
     }
   } catch (Throwable $e) {}
+  return $sonuc;
 }
 register_shutdown_function("arkaPlanIsleri");
 function konumSatiri($ad, $k){
@@ -497,12 +529,10 @@ function bitrixSenkron($db, $u, $gun, $yeniDurum, $rapor = ""){
 }
 
 /* ---------------- Telegram ---------------- */
-function telegramGonder($metin, $html = false){
-  global $TG_TOKEN, $TG_CHAT;
-  if (empty($TG_TOKEN) || empty($TG_CHAT)) return ["ok"=>false, "sebep"=>"token/chat ayarlanmamış"];
-  $url = "https://api.telegram.org/bot$TG_TOKEN/sendMessage";
-  $alanlar = ["chat_id"=>$TG_CHAT, "text"=>$metin, "disable_web_page_preview"=>1];
-  if ($html) $alanlar["parse_mode"] = "HTML";
+function telegramApi($metot, $alanlar){
+  global $TG_TOKEN;
+  if (empty($TG_TOKEN)) return ["ok"=>false, "sebep"=>"token ayarlanmamış"];
+  $url = "https://api.telegram.org/bot$TG_TOKEN/$metot";
   if (function_exists("curl_init")) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_RETURNTRANSFER=>true,
@@ -515,19 +545,134 @@ function telegramGonder($metin, $html = false){
     $res = @file_get_contents($url, false, $ctx);
   }
   $j = json_decode((string)$res, true);
-  return ["ok" => !empty($j["ok"]), "sebep" => $j["description"] ?? "yanıt alınamadı"];
+  return ["ok" => !empty($j["ok"]), "sonuc" => $j["result"] ?? null,
+          "kod" => (int)($j["error_code"] ?? 0), "sebep" => $j["description"] ?? "yanıt alınamadı"];
+}
+function telegramGonder($metin, $html = false){
+  global $TG_CHAT;
+  if (empty($TG_CHAT)) return ["ok"=>false, "sebep"=>"token/chat ayarlanmamış"];
+  $alanlar = ["chat_id"=>$TG_CHAT, "text"=>$metin, "disable_web_page_preview"=>1];
+  if ($html) $alanlar["parse_mode"] = "HTML";
+  return telegramApi("sendMessage", $alanlar);
+}
+
+/* ---------------- Kişisel Telegram (özel mesaj) ----------------
+   Telegram kuralı: bot bir kişiye ancak o kişi botu bir kez BAŞLAT'tıysa yazabilir.
+   @kullaniciadi ile doğrudan yazılamaz; botu başlatan kişinin sayısal kimliği
+   getUpdates'ten öğrenilip tg_kisiler tablosunda saklanır. */
+function tgHedefBul($db, $u){
+  global $TG_KISILER;
+  $ham = trim((string)($u["tg_id"] ?? "")); $kaynak = "db";
+  if ($ham === "") {
+    $kadi = tlower(trim($u["kadi"] ?? "")); $ham = ""; $kaynak = "yok";
+    foreach (($TG_KISILER ?? []) as $k => $v) if (tlower(trim($k)) === $kadi) { $ham = trim((string)$v); $kaynak = "dosya"; break; }
+  }
+  if ($ham === "") return ["ham"=>"", "chat"=>null, "kaynak"=>"yok", "sebep"=>"Telegram kimliği girilmemiş"];
+  if (preg_match('/^-?\d+$/', $ham)) {
+    if ((int)$ham < 0) return ["ham"=>$ham, "chat"=>null, "kaynak"=>$kaynak, "sebep"=>"eksi ile başlayan kimlik bir GRUBA ait, kişiye değil"];
+    return ["ham"=>$ham, "chat"=>(int)$ham, "kaynak"=>$kaynak, "sebep"=>""];
+  }
+  $kul = strtolower(ltrim($ham, "@"));
+  $s = $db->prepare("SELECT chat_id FROM tg_kisiler WHERE kullanici=?"); $s->execute([$kul]);
+  $c = $s->fetchColumn();
+  if ($c) return ["ham"=>"@$kul", "chat"=>(int)$c, "kaynak"=>$kaynak, "sebep"=>""];
+  return ["ham"=>"@$kul", "chat"=>null, "kaynak"=>$kaynak, "sebep"=>"@$kul henüz botu başlatmamış (kimliği öğrenilemedi)"];
+}
+function tgLog($db, $u, $tur, $ok, $sebep){
+  try {
+    $db->prepare("INSERT INTO tg_log(zaman,user_id,ad,tur,ok,sebep) VALUES(?,?,?,?,?,?)")
+       ->execute([time(), (int)($u["id"] ?? 0), $u["ad"] ?? "", $tur, $ok ? 1 : 0, mb_substr((string)$sebep, 0, 300)]);
+    $db->exec("DELETE FROM tg_log WHERE id NOT IN (SELECT id FROM tg_log ORDER BY id DESC LIMIT 2000)");
+  } catch (Throwable $e) {}
+}
+/* Kişiye özel mesaj. Dönüş: ok, sebep, kalici (tekrar denemenin anlamı yok mu) */
+function tgOzel($db, $u, $metin, $tur){
+  global $UYGULAMA_URL;
+  $h = tgHedefBul($db, $u);
+  if (!$h["chat"]) { tgLog($db, $u, $tur, false, $h["sebep"]); return ["ok"=>false, "sebep"=>$h["sebep"], "kalici"=>true]; }
+  $alanlar = ["chat_id"=>$h["chat"], "text"=>$metin, "disable_web_page_preview"=>1];
+  if ($UYGULAMA_URL) $alanlar["reply_markup"] = json_encode(["inline_keyboard"=>[[["text"=>"📲 Mesai uygulamasını aç", "url"=>$UYGULAMA_URL]]]]);
+  $r = telegramApi("sendMessage", $alanlar);
+  $sebep = $r["ok"] ? "gönderildi" : $r["sebep"];
+  if (!$r["ok"] && in_array($r["kod"], [400, 403], true))
+    $sebep .= " — kişi botu başlatmamış ya da engellemiş olabilir";
+  tgLog($db, $u, $tur, $r["ok"], $sebep);
+  return ["ok"=>$r["ok"], "sebep"=>$sebep, "kalici"=>in_array($r["kod"], [400, 403], true)];
+}
+/* Botu başlatan/yazan kişilerin kimliklerini öğren (getUpdates, onay vermeden okur).
+   Bot başka bir sistemde webhook kullanıyorsa Telegram 409 döner. */
+function tgEslestir($db){
+  $r = telegramApi("getUpdates", ["limit"=>100, "timeout"=>0]);
+  if (!$r["ok"]) return ["ok"=>false, "sebep"=>$r["sebep"] . ($r["kod"] === 409 ? " — bot webhook kullanıyor; bu kişiler için sayısal ID girin" : "")];
+  $yeni = 0;
+  foreach (($r["sonuc"] ?? []) as $up) foreach (["message","edited_message","callback_query","my_chat_member"] as $k) {
+    $f = $up[$k]["from"] ?? null; $chat = $up[$k]["chat"] ?? ($up[$k]["message"]["chat"] ?? null);
+    if (!$f || empty($f["username"]) || empty($f["id"])) continue;
+    if ($chat && ($chat["type"] ?? "") !== "private" && $k !== "callback_query") continue;
+    $s = $db->prepare("INSERT INTO tg_kisiler(kullanici,chat_id,ad,zaman) VALUES(?,?,?,?)
+      ON CONFLICT(kullanici) DO UPDATE SET chat_id=excluded.chat_id, ad=excluded.ad, zaman=excluded.zaman");
+    $s->execute([strtolower($f["username"]), (int)$f["id"], trim(($f["first_name"] ?? "") . " " . ($f["last_name"] ?? "")), time()]);
+    $yeni++;
+  }
+  return ["ok"=>true, "sebep"=>count($r["sonuc"] ?? []) . " güncelleme okundu, $yeni kişi kaydı güncellendi"];
+}
+/* Aynı hatırlatmayı bir kez gönder; geçici hata olursa sonraki turda yeniden dener */
+function hatirlatBirKez($db, $anahtar, $u, $metin, $tur){
+  // Kimliği henüz çözülemeyen (botu başlatmamış) kişiyi atla; başlattığında sonraki turda gider
+  if (!tgHedefBul($db, $u)["chat"]) return;
+  $s = $db->prepare("INSERT OR IGNORE INTO gorevler(anahtar,durum,zaman) VALUES(?,'tamam',?)");
+  $s->execute([$anahtar, time()]);
+  if ($s->rowCount() !== 1) return;
+  $r = tgOzel($db, $u, $metin, $tur);
+  if ($r["ok"] || $r["kalici"]) $db->prepare("UPDATE gorevler SET notlar=? WHERE anahtar=?")->execute([$r["sebep"], $anahtar]);
+  else $db->prepare("DELETE FROM gorevler WHERE anahtar=?")->execute([$anahtar]);
+}
+/* Unutkanlara özelden hatırlatma:
+   - Akşam (19:00 sonrası): mesaisi hâlâ açık olanlar
+   - Gün içinde: belirlenen süreden uzun açık kalan mola */
+function hatirlatmalar($db){
+  global $HATIRLATMA_SAAT, $MOLA_HATIRLATMA_DK;
+  $gun = date("Y-m-d"); $nowMs = (int)round(microtime(true) * 1000); $saat = (int)date("G");
+  $q = $db->prepare("SELECT g.user_id, g.veri, u.id, u.kadi, u.ad, u.tg_id FROM gunler g JOIN users u ON u.id=g.user_id
+                     WHERE g.gun=? AND u.aktif=1 AND (g.veri LIKE '%\"durum\":\"calisiyor\"%' OR g.veri LIKE '%\"durum\":\"molada\"%')");
+  $q->execute([$gun]);
+  foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    $v = json_decode($r["veri"], true) ?: [];
+    $durum = $v["durum"] ?? ""; $bas = (int)($v["bas"] ?? 0);
+    $ilk = explode(" ", trim($r["ad"]))[0];
+    if ($HATIRLATMA_SAAT !== false && $saat >= (int)$HATIRLATMA_SAAT) {
+      $o = gunOzet($v, $nowMs);
+      $m = "⏰ $ilk, mesain hâlâ açık görünüyor" . ($durum === "molada" ? " (üstelik molada 😄)" : "") . ".\n"
+         . "Giriş: " . ($o["ilk"] ? saatMs($o["ilk"]) : "?") . " · şu ana kadar " . fmtSaatPHP($o["calisma"]) . " çalışma.\n\n"
+         . "Çıktıysan uygulamadan ⏹ Mesaiyi Sonlandır'a basmayı unutma, yoksa akşam raporunda 'hâlâ mesaide' görünürsün.\n"
+         . "Hâlâ çalışıyorsan bu mesajı yok say, kolay gelsin! 💪";
+      hatirlatBirKez($db, "hatir:aksam:{$r["id"]}:$gun", $r, $m, "akşam");
+    }
+    $tip = $v["tip"] ?? "";
+    if ($durum === "molada" && $bas && isset($MOLA_HATIRLATMA_DK[$tip], MOLA_TIPLERI[$tip])) {
+      $gecen = $nowMs - $bas;
+      if ($gecen >= (int)$MOLA_HATIRLATMA_DK[$tip] * 60000 && $gecen < 12 * 3600000) {
+        $mt = MOLA_TIPLERI[$tip];
+        $m = "{$mt["emoji"]} $ilk, " . mb_strtolower($mt["ad"]) . " molan " . saatMs($bas) . "'de başladı, "
+           . fmtSaatPHP($gecen) . " oldu ve hâlâ açık görünüyor.\n"
+           . "Döndüysen uygulamada ▶ Çalışmaya Devam Et'e basmayı unutma 🙂";
+        hatirlatBirKez($db, "hatir:mola:{$r["id"]}:$bas", $r, $m, "mola");
+      }
+    }
+  }
 }
 
 /* ---------------- İstek ayrıştırma ---------------- */
 $ham = $CLI ? "" : file_get_contents("php://input");
 $in = json_decode($ham, true) ?: [];
 $act = $_GET["action"] ?? $in["action"] ?? "";
-/* Komut satırı (cron) yalnızca günlük raporu çalıştırır:
-   php api.php            → 20:00'den sonra bugünün, önce ise dünün raporu
+/* Komut satırı (cron):
+   php api.php            → zamanlanmış işler: hatırlatmalar + 20:00'den sonra günün raporu
+                            (cron ile her 10 dakikada bir çalıştırın)
    php api.php 2026-10-05 → belirli günün raporu (o gün zaten gönderildiyse atlar) */
 if ($CLI) {
-  $act = "gunluk_rapor_cron";
-  foreach (array_slice($argv ?? [], 1) as $arg) if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $arg)) $_GET["gun"] = $arg;
+  $act = "zamanli_cron";
+  foreach (array_slice($argv ?? [], 1) as $arg) if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $arg)) { $_GET["gun"] = $arg; $act = "gunluk_rapor_cron"; }
 }
 
 /* ---- kullanıcı doğrulama ---- */
@@ -766,13 +911,15 @@ case "admin_giris":
 
 case "kullanici_listesi":
   adminAuth();
-  $rows = $db->query("SELECT id,kadi,ad,rol,aktif,bitrix_id FROM users ORDER BY ad")->fetchAll(PDO::FETCH_ASSOC);
+  $rows = $db->query("SELECT id,kadi,ad,rol,aktif,bitrix_id,tg_id FROM users ORDER BY ad")->fetchAll(PDO::FETCH_ASSOC);
   // Etkin (efektif) Bitrix ID'yi de ekle: DB boşsa config haritasından çözülen değer
   foreach ($rows as &$r) {
     $etkin = bitrixIdBul($r);
     $r["bitrix_id"] = $r["bitrix_id"] !== null ? (int)$r["bitrix_id"] : null;
     $r["bitrix_etkin"] = $etkin ?: null;
     $r["bitrix_kaynak"] = !empty($r["bitrix_id"]) ? "db" : ($etkin ? "config" : "yok");
+    $h = tgHedefBul($db, $r);
+    $r["tg_ham"] = $h["ham"]; $r["tg_hazir"] = (bool)$h["chat"]; $r["tg_sebep"] = $h["sebep"]; $r["tg_kaynak"] = $h["kaynak"];
   }
   unset($r);
   out(["ok"=>true, "liste"=>$rows]);
@@ -785,6 +932,36 @@ case "bitrix_id_ata":
   if ($uid <= 0) err("Kullanıcı seçilmedi");
   $db->prepare("UPDATE users SET bitrix_id=? WHERE id=?")->execute([$bid, $uid]);
   out(["ok"=>true]);
+
+case "tg_id_ata": // kişiye özel Telegram kimliği (sayısal ID veya @kullaniciadi; boş = dosyadaki değer)
+  adminAuth();
+  $uid = (int)($in["id"] ?? 0);
+  $t = trim((string)($in["tg_id"] ?? ""));
+  if ($uid <= 0) err("Kullanıcı seçilmedi");
+  if ($t !== "" && !preg_match('/^(@?[A-Za-z0-9_]{4,32}|\d{4,15})$/', $t)) err("Sayısal ID ya da @kullaniciadi girin");
+  if ($t !== "" && !ctype_digit($t) && $t[0] !== "@") $t = "@$t";
+  $db->prepare("UPDATE users SET tg_id=? WHERE id=?")->execute([$t === "" ? null : $t, $uid]);
+  out(["ok"=>true]);
+
+case "tg_eslestir": // botu başlatanların kimliklerini öğren + bot bilgisi
+  adminAuth();
+  $r = tgEslestir($db);
+  $me = telegramApi("getMe", []);
+  $r["bot"] = $me["ok"] ? ($me["sonuc"]["username"] ?? null) : null;
+  out($r);
+
+case "tg_dm_test":
+  adminAuth();
+  $s = $db->prepare("SELECT * FROM users WHERE id=?"); $s->execute([(int)($in["id"] ?? 0)]);
+  $u = $s->fetch(PDO::FETCH_ASSOC);
+  if (!$u) err("Kullanıcı seçilmedi");
+  $ilk = explode(" ", trim($u["ad"]))[0];
+  $r = tgOzel($db, $u, "👋 Merhaba $ilk! Bu XRE Mesai'den bir deneme mesajı. Mesaini kapatmayı unutursan sana buradan hatırlatacağım 😉", "test");
+  out(["ok"=>$r["ok"], "sebep"=>$r["sebep"]]);
+
+case "tg_log":
+  adminAuth();
+  out(["ok"=>true, "log"=>$db->query("SELECT * FROM tg_log ORDER BY id DESC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC)]);
 
 case "kullanici_ekle":
   adminAuth();
@@ -890,6 +1067,10 @@ case "gunluk_rapor":
 
 /* Cron: "php api.php" (CLI)  ya da  api.php?action=cron&anahtar=GIZLI (URL)
    20:00'den sonra çalışırsa bugünün, önce çalışırsa dünün raporu; aynı gün için ikinci kez göndermez. */
+case "zamanli_cron":
+  if (!$CLI) err("Yetkisiz");
+  out(["ok"=>true] + zamanliIsler($db));
+
 case "cron":
 case "gunluk_rapor_cron":
   $yetkili = $CLI || ($act === "cron" && $CRON_ANAHTAR !== "" && hash_equals((string)$CRON_ANAHTAR, (string)($_GET["anahtar"] ?? "")));
