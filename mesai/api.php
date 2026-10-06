@@ -15,6 +15,13 @@
 define("XRE_API", 1);
 require __DIR__ . "/config.php"; // gizli ayarlar (token, webhook, admin hash)
 
+/* PHP 7.4 / mbstring'siz sunucular için yedekler (PHP 8 fonksiyonları yoksa sessizce patlıyordu) */
+if (!function_exists("str_starts_with")) { function str_starts_with($h, $n){ return $n === "" || strncmp((string)$h, (string)$n, strlen((string)$n)) === 0; } }
+if (!function_exists("str_contains"))    { function str_contains($h, $n){ return $n === "" || strpos((string)$h, (string)$n) !== false; } }
+if (!function_exists("mb_strlen"))       { function mb_strlen($s){ return (int)preg_match_all('/./us', (string)$s); } }
+if (!function_exists("mb_substr"))       { function mb_substr($s, $b, $l = null){ preg_match_all('/./us', (string)$s, $m); return implode("", array_slice($m[0], $b, $l)); } }
+if (!function_exists("mb_strtolower"))   { function mb_strtolower($s){ return tlower($s); } }
+
 /* config.php'de tanımlı değilse varsayılanlar (eski config dosyaları da çalışsın) */
 $GUNLUK_RAPOR_SAAT = $GUNLUK_RAPOR_SAAT ?? 20;  // her akşam bu saatte o günün toplu raporu (false = kapalı)
 $CRON_ANAHTAR      = $CRON_ANAHTAR ?? "";       // URL ile cron tetiklemek için gizli anahtar (boş = yalnız CLI)
@@ -355,7 +362,7 @@ function zamanliIsler($db){
       // Webhook kuruluysa (409) saatte bir bakmak yeter; değilse dakikada bir gelen kutusunu işle
       $s = $db->prepare("SELECT zaman, notlar FROM gorevler WHERE anahtar='tg_eslestir'"); $s->execute();
       $g = $s->fetch(PDO::FETCH_ASSOC);
-      $aralik = ($g && str_starts_with((string)$g["notlar"], "Webhook")) ? 3600 : 55;
+      $aralik = ($g && str_starts_with((string)$g["notlar"], "Webhook")) ? 300 : 55; // webhook'ta 5 dk'da bir sağlık kontrolü
       if (gorevAl($db, "tg_eslestir", $aralik)) { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); }
     } elseif ($bekleyen && gorevAl($db, "tg_eslestir", 600)) { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); }
   } catch (Throwable $e) {}
@@ -682,6 +689,17 @@ function tgEslestir($db){
     $off = (int)$s->fetchColumn(); if ($off) $alan["offset"] = $off;
   }
   $r = ozelApi("getUpdates", $alan);
+  if (!$r["ok"] && $r["kod"] === 409 && $ayri) {
+    // Webhook kurulu. Telegram sunucumuza ulaşamıyorsa (güvenlik duvarı, 403, SSL…) mesajlar
+    // birikir ve kimse yanıt alamaz → webhook'u kaldır, dakikalık yoklamaya geri dön.
+    $w = ozelApi("getWebhookInfo", []); $wi = $w["sonuc"] ?? [];
+    $hataYeni = !empty($wi["last_error_date"]) && time() - (int)$wi["last_error_date"] < 1800;
+    if ($w["ok"] && ($hataYeni || (int)($wi["pending_update_count"] ?? 0) > 0)) {
+      ozelApi("deleteWebhook", ["drop_pending_updates"=>"false"]);
+      tgLog($db, [], "webhook", false, "Webhook kaldırıldı, yoklamaya dönüldü — Telegram'ın hatası: " . ($wi["last_error_message"] ?? "bekleyen mesajlar işlenmiyor"));
+      $r = ozelApi("getUpdates", $alan);
+    }
+  }
   if (!$r["ok"]) return ["ok"=>$r["kod"] === 409, "webhook"=>$r["kod"] === 409,
     "sebep"=>$r["kod"] === 409 ? "Webhook kurulu — bot gelen mesajları anında işliyor ✓" : $r["sebep"]];
   $n = 0; $son = 0;
@@ -819,6 +837,10 @@ case "tg_durum": // çalışan: Telegram bağlı mı + kişiye özel bağlantı 
   $u = auth($db);
   if (empty($TG_TOKEN) && empty($TG_OZEL_TOKEN)) out(["ok"=>true, "aktif"=>false]);
   $bagli = (bool)tgHedefBul($db, $u)["chat"];
+  if (!$bagli && ozelBotAyri() && !empty($_GET["bekle"]) && gorevAl($db, "tg_eslestir", 6)) {
+    try { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); } catch (Throwable $e) { gorevBitir($db, "tg_eslestir", false, "hata: " . $e->getMessage()); }
+    $bagli = (bool)tgHedefBul($db, $u)["chat"];
+  }
   $bot = $bagli ? null : ozelBotAdi($db);
   out(["ok"=>true, "aktif"=>true, "bagli"=>$bagli,
        "link"=>$bot ? "https://t.me/$bot?start=" . baglaKodu((int)$u["id"]) : null]);
@@ -1058,6 +1080,27 @@ case "tg_webhook_kur": // ayrı botu webhook'a bağla + bot açıklamasını yaz
   ozelApi("setMyDescription", ["description"=>"XRE Real Estate mesai hatırlatma botu.\n\nMesaini kapatmayı unutursan ya da molan uzun süre açık kalırsa sana buradan haber veririm. Başlamak için BAŞLAT'a bas, sonra mesai uygulamasındaki \"Telegram'ı bağla\" düğmesine dokun."]);
   gorevBitir($db, "tg_eslestir", false, "Webhook kuruldu");
   out(["ok"=>true, "sebep"=>"Anında yanıt kuruldu ✓ (bot açıklaması da yazıldı)"]);
+
+case "tg_teshis": // bot neden yanıt vermiyor? — adım adım kontrol
+  adminAuth();
+  $k = [];
+  $k[] = ["PHP sürümü", true, PHP_VERSION . (function_exists("mb_substr") ? "" : " (mbstring yok — yedek kullanılıyor)")];
+  $k[] = ["cURL", function_exists("curl_init"), function_exists("curl_init") ? "var" : "yok (file_get_contents kullanılıyor)"];
+  $k[] = ["Ayrı hatırlatma botu", ozelBotAyri(), ozelBotAyri() ? "\$TG_OZEL_TOKEN tanımlı" : "tanımlı değil — kisiler.php yüklendi mi?"];
+  $me = ozelApi("getMe", []);
+  $k[] = ["Sunucu → Telegram bağlantısı", $me["ok"], $me["ok"] ? "@" . ($me["sonuc"]["username"] ?? "?") : $me["sebep"]];
+  $w = ozelApi("getWebhookInfo", []); $wi = $w["sonuc"] ?? [];
+  if (!empty($wi["url"])) {
+    $son = !empty($wi["last_error_date"]) ? (round((time() - $wi["last_error_date"]) / 60) . " dk önce: " . ($wi["last_error_message"] ?? "")) : "hata yok";
+    $k[] = ["Webhook (anında yanıt)", empty($wi["last_error_date"]) || time() - $wi["last_error_date"] > 1800,
+            "kurulu · bekleyen " . (int)($wi["pending_update_count"] ?? 0) . " · son hata: $son"];
+  } else $k[] = ["Webhook (anında yanıt)", true, "kurulu değil — dakikalık yoklama kullanılıyor"];
+  $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]);
+  $k[] = ["Gelen kutusu şimdi işlendi", $r["ok"], $r["sebep"]];
+  $bagli = 0; $toplam = 0;
+  foreach ($db->query("SELECT * FROM users WHERE aktif=1")->fetchAll(PDO::FETCH_ASSOC) as $x) { $toplam++; if (tgHedefBul($db, $x)["chat"]) $bagli++; }
+  $k[] = ["Bağlı çalışan", $bagli > 0, "$bagli / $toplam"];
+  out(["ok"=>true, "kontroller"=>array_map(fn($x) => ["ad"=>$x[0], "ok"=>(bool)$x[1], "detay"=>$x[2]], $k)]);
 
 case "tg_dm_test":
   adminAuth();

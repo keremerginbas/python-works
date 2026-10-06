@@ -1,3 +1,14 @@
+# XRE Mesai — 5.1 Bot yanıt vermiyordu: düzeltmeler + teşhis
+
+- **PHP 7.4 uyumluluğu:** PHP 8'e özgü `str_starts_with` / `str_contains` ve mbstring fonksiyonları
+  için yedekler eklendi. Bu fonksiyonlar eksikse bot gelen kutusu kontrolü sessizce atlanıyordu.
+- **Bozuk webhook kendini onarır:** "Anında yanıt" kurulu ama Telegram sunucuya ulaşamıyorsa
+  (güvenlik duvarı/403/SSL) webhook otomatik kaldırılır, dakikalık yoklamaya dönülür, biriken mesajlar işlenir.
+- **Bağlanma hızlandı:** Uygulamada "Telegram'ı Bağla"ya basınca uygulama 6 sn'de bir sunucuya sorar;
+  sunucu bu sırada botun gelen kutusunu hemen işler (webhook olmasa da ~10 sn'de "Bağlandın").
+- **🩺 Bot Teşhisi** (admin): PHP sürümü, sunucu→Telegram bağlantısı, webhook durumu ve son hatası,
+  gelen kutusu işleme sonucu, bağlı çalışan sayısı.
+
 # XRE Mesai — 5. Ayrı hatırlatma botu (@xremesaibot) + tek dokunuşla bağlanma
 
 - Kişisel mesajlar artık **ayrı bottan** gidiyor (`$TG_OZEL_TOKEN`, kisiler.php içinde).

@@ -1177,10 +1177,10 @@ async function siralamaYukle(kutla=false){
 
 /* ---------- Telegram bağlama ----------
    Kişiye özel linkle bot açılır; BAŞLAT'a basınca sunucu kişiyi eşleştirir ve bot "Bağlandın" der. */
-async function tgDurumYukle(){
+async function tgDurumYukle(bekle){
   if (!OT) return;
   let gizli = false; try { gizli = localStorage.getItem("xre-tg-gizle:"+OT.kadi) === gunKey(); } catch(e){}
-  const r = await apiCall("tg_durum");
+  const r = await apiCall("tg_durum" + (bekle ? "&bekle=1" : ""));
   const goster = r && r.ok && r.aktif && !r.bagli && r.link && !gizli;
   $("tgBant").classList.toggle("show", !!goster);
   if (goster) $("tgBantLink").href = r.link;
@@ -1191,9 +1191,9 @@ function tgBaglandiKontrol(){
   // Kişi Telegram'da BAŞLAT'a basınca eşleşme birkaç saniye–1 dk içinde olur
   let n = 0;
   const t = setInterval(async ()=>{
-    const r = await tgDurumYukle();
-    if ((r && r.bagli) || ++n > 12){ clearInterval(t); if (r && r.bagli) bildir("✅ Telegram bağlandı — hatırlatmalar artık sana özelden gelecek"); }
-  }, 8000);
+    const r = await tgDurumYukle(true); // sunucu bu sırada botun gelen kutusunu işler
+    if ((r && r.bagli) || ++n > 15){ clearInterval(t); if (r && r.bagli) bildir("✅ Telegram bağlandı — hatırlatmalar artık sana özelden gelecek"); }
+  }, 6000);
 }
 
 /* ---------- Hoş geldin / akşam hatırlatma kutusu ----------

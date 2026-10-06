@@ -231,6 +231,7 @@ label{font-size:12px;color:var(--mute);font-weight:700;display:block;margin:10px
           <button class="mini" onclick="tgDmTest()">✉ Deneme Mesajı Gönder</button>
           <button class="mini" onclick="tgEslestir()">🔄 Botu Başlatanları Eşleştir</button>
           <button class="mini" onclick="tgWebhookKur()">⚡ Anında Yanıtı Kur</button>
+          <button class="mini" onclick="tgTeshis()">🩺 Bot Teşhisi</button>
           <button class="mini" onclick="tgLogYukle()">↻ Kayıtları Yenile</button>
         </div>
         <div class="msg" id="tgDmMsg"></div>
@@ -458,6 +459,15 @@ async function tgWebhookKur(){
   if (!confirm("Kişisel bot Telegram'a şu adresle bağlanacak:\n" + url + "\n\nBöylece BAŞLAT'a basanlar anında yanıt alır. Devam?")) return;
   const r = await api("tg_webhook_kur", { url });
   tgDmMsg((r.ok ? "✓ " : "✗ ") + (r.sebep || r.hata || ""), r.ok ? "var(--green)" : "var(--brick)");
+}
+async function tgTeshis(){
+  tgDmMsg("Kontrol ediliyor…", "var(--mute)");
+  const r = await api("tg_teshis"), w = $("tgLogWrap");
+  if (!r.ok){ tgDmMsg("✗ " + (r.hata || "Teşhis alınamadı"), "var(--brick)"); return; }
+  $("tgDmMsg").style.display = "none";
+  w.innerHTML = r.kontroller.map(k => `<div class="log-row ${k.ok?'ok':'no'}"><span class="ic">${k.ok?'✓':'✗'}</span>
+    <span class="lw" style="min-width:190px">${esc(k.ad)}</span><span class="rs">${esc(k.detay)}</span></div>`).join("")
+    + `<div class="log-empty"><a href="#" onclick="tgLogYukle();return false" style="color:var(--gold-l)">← gönderim kayıtlarına dön</a></div>`;
 }
 async function tgDmTest(){
   const uid = $("tgUser").value;
