@@ -36,6 +36,12 @@
 - Hata sebebi kaydediliyor (`konum izni verilmedi` / `zaman aşımı`); ekranda **Tekrar dene**
   düğmesi ve izin talimatı görünüyor.
 
+## Hoş geldin kutusu
+- Günün ilk açılışında: "Günaydın, Ahmet!" + rastgele güler yüzlü bir söz + şakalı
+  "çıkarken mesaiyi kapatmayı unutma" notu. Mesai başlamadıysa kutudan tek dokunuşla başlatılır.
+- Akşam 18:00'den sonra hâlâ mesaide olan birine bir kez "Mesai bitiyor mu?" hatırlatması
+  (doğrudan "Mesaiyi Sonlandır" düğmesiyle). Her ikisi de kişi başına günde bir kez gösterilir.
+
 ## Arayüz
 - Selamlama + canlı durum rozeti, kullanıcı avatarı.
 - Halka artık **günlük hedefi (8 sa)** gösteriyor; altında Net çalışma / Mola / Giriş kartları.
@@ -45,7 +51,7 @@
 - **Veri kaybı düzeltmesi:** "Yeni Gün Başlat" günün kayıtlarını sıfırlıyordu → yerine
   **"Mesaiye Geri Dön"** (aynı günü kaldığı yerden sürdürür).
 - Uygulama gece boyu açık kalırsa ertesi gün kendini yeniler.
-- `sw.js` önbellek sürümü `v15`.
+- `sw.js` önbellek sürümü `v16`.
 
 ## Bitrix'te molalar
 Molalar Bitrix'e `timeman.pause` ile **duraklama** olarak gidiyor (senkron günlüğünde

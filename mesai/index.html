@@ -456,6 +456,26 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
   transition:opacity .25s,transform .25s}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* Hoş geldin / akşam hatırlatma kutusu */
+.hg{position:fixed;inset:0;z-index:210;display:none;align-items:center;justify-content:center;padding:20px;
+  background:#050815b3;backdrop-filter:blur(6px)}
+.hg.show{display:flex}
+.hg-kart{position:relative;width:100%;max-width:420px;text-align:center;overflow:hidden;
+  background:linear-gradient(170deg,#2a3568,var(--card) 60%);border:1px solid #D4AF6E66;border-radius:26px;
+  padding:34px 26px 24px;box-shadow:0 40px 90px -24px #000, inset 0 1px 0 #ffffff1a;animation:hgIn .5s cubic-bezier(.2,.9,.25,1.2) both}
+.hg-kart::before{content:"";position:absolute;inset:-40% -20% auto;height:70%;pointer-events:none;
+  background:radial-gradient(closest-side,#D4AF6E33,transparent)}
+@keyframes hgIn{from{opacity:0;transform:translateY(30px) scale(.92)}to{opacity:1;transform:none}}
+.hg-emoji{font-size:54px;line-height:1;display:inline-block;animation:hgSalla 2.4s ease-in-out .5s infinite;position:relative}
+@keyframes hgSalla{0%,100%{transform:rotate(0)}15%{transform:rotate(14deg)}30%{transform:rotate(-10deg)}45%{transform:rotate(8deg)}60%{transform:rotate(0)}}
+.hg-kart h2{font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;font-size:30px;line-height:1.15;margin-top:14px;position:relative}
+.hg-kart h2 em{font-style:normal;color:var(--gold-l)}
+.hg-kart p{font-size:14.5px;color:var(--ink);opacity:.9;margin-top:10px;line-height:1.6;position:relative}
+.hg-not{margin-top:16px;font-size:13px;font-weight:700;color:var(--gold-l);background:#D4AF6E14;border:1px dashed #D4AF6E66;
+  border-radius:14px;padding:11px 14px;line-height:1.5;position:relative}
+.hg-btns{display:flex;flex-direction:column;gap:9px;margin-top:20px;position:relative}
+.hg-btns .pwa-later{padding:12px}
+
 @media(max-width:560px){
   header{gap:12px}
   .who-t{display:none}
@@ -571,6 +591,15 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 
 <div id="konfeti"></div>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="hosgeldin" class="hg" onclick="if(event.target===this)hgKapat()">
+  <div class="hg-kart" role="dialog" aria-modal="true" aria-labelledby="hgBaslik">
+    <div class="hg-emoji" id="hgEmoji">☀️</div>
+    <h2 id="hgBaslik"></h2>
+    <p id="hgMetin"></p>
+    <div class="hg-not" id="hgNot"></div>
+    <div class="hg-btns" id="hgBtns"></div>
+  </div>
+</div>
 <button class="install" id="installBtn">⬇ Uygulamayı Yükle</button>
 
 <script>
@@ -634,6 +663,7 @@ function ekranAc(){
   // Açılışta aktif/biten bir gün varsa sunucuyla bir kez uzlaştır (çevrimdışı biten
   // mesai yeniden açıldığında da Bitrix'e/rapora ulaşsın).
   if (S && S.durum && S.durum !== "hazir"){ dirty=true; rozetGuncelle(); planla(400); }
+  setTimeout(hosgeldinGoster, 500);
 }
 
 /* ---------- Sunucu senkronu: güvenilir kuyruk ----------
@@ -1125,6 +1155,56 @@ async function siralamaYukle(kutla=false){
   if (kutla && liste.length) konfetiPatlat();
 }
 
+/* ---------- Hoş geldin / akşam hatırlatma kutusu ----------
+   Sabah: günün ilk açılışında bir kez. Akşam (18:00 sonrası): hâlâ mesaideyse bir kez. */
+const SABAH_SOZLERI = [
+  ["☕", "Kahven hazırsa başlıyoruz! Bugün harika işler çıkaracağına eminiz."],
+  ["🚀", "Çay demlendi, Bitrix hazır, sıra sende. Bugün senin günün!"],
+  ["🏆", "Sıralamada zirve seni bekliyor. Ama önce şu mesaiyi bir başlatalım 😉"],
+  ["🌞", "Erken kalkan yol alır, mesaisini başlatan sıralamada yükselir."],
+  ["💪", "Güzel bir gün geçirmeni dileriz. Şimdiden kolay gelsin, iyi çalışmalar!"],
+  ["🍀", "Bugün şans senden yana. Müşteriler de öyle olsun inşallah 🤞"],
+  ["🎯", "Hedef: 8 saat, bol satış, sıfır stres. Çay molası da serbest ☕"],
+];
+const KAPAT_SAKALARI = [
+  "Çıkarken mesaiyi kapatmayı unutma, yoksa sistem seni gece yarısı hâlâ çalışıyor sanar 😄",
+  "Akşam ⏹ düğmesine basmayı unutma, Bitrix sana gece vardiyası yazmasın 🌙",
+  "Çıkarken mesaiyi kapat, yoksa yarın sabah 23 saat çalışmış görünürsün. Rekor olur ama kimse inanmaz 😅",
+  "Unutma: mesaiyi kapatmadan çıkan çalışan, raporda 'hâlâ mesaide' diye efsaneleşir 👻",
+];
+const sec = (l) => l[Math.floor(Math.random()*l.length)];
+function hgKapat(){ $("hosgeldin").classList.remove("show"); }
+function hosgeldinGoster(){
+  if (!OT || $("hosgeldin").classList.contains("show")) return;
+  const anahtar = "xre-hg:" + OT.kadi, gun = gunKey(), h = new Date().getHours();
+  let k = {}; try { k = JSON.parse(localStorage.getItem(anahtar) || "{}") || {}; } catch(e){}
+  const aktif = S.durum==="calisiyor" || S.durum==="molada";
+  const mod = (k.sabah !== gun && S.durum !== "bitti") ? "sabah" : (h >= 18 && aktif && k.aksam !== gun) ? "aksam" : null;
+  if (!mod) return;
+  k[mod] = gun; try { localStorage.setItem(anahtar, JSON.stringify(k)); } catch(e){}
+  const ad = esc(ilkAd(OT.ad));
+  if (mod === "sabah"){
+    const [emoji, soz] = sec(SABAH_SOZLERI);
+    const selam = h<6 ? "İyi geceler" : h<12 ? "Günaydın" : h<18 ? "İyi günler" : "İyi akşamlar";
+    $("hgEmoji").textContent = h<12 ? "☀️" : emoji;
+    $("hgBaslik").innerHTML = `${selam}, <em>${ad}</em>!`;
+    $("hgMetin").textContent = soz;
+    $("hgNot").textContent = "⏹ " + sec(KAPAT_SAKALARI);
+    $("hgBtns").innerHTML = S.durum==="hazir"
+      ? `<button class="btn btn-start" onclick="hgKapat();baslat()">▶ Mesaiyi Başlat</button>
+         <button class="pwa-later" onclick="hgKapat()">Birazdan başlayacağım</button>`
+      : `<button class="btn btn-start" onclick="hgKapat()">Hadi bakalım 💪</button>`;
+  } else {
+    $("hgEmoji").textContent = "🌙";
+    $("hgBaslik").innerHTML = `Mesai bitiyor mu, <em>${ad}</em>?`;
+    $("hgMetin").textContent = "Saat 18'i geçti, sen hâlâ mesaide görünüyorsun. Bugün emeğine sağlık! 👏";
+    $("hgNot").textContent = "📋 Çıkıyorsan mesaini kapat. Günün raporu saat 20:00'de gruba gidecek.";
+    $("hgBtns").innerHTML = `<button class="btn btn-stop" onclick="hgKapat();sonlandir()">⏹ Mesaiyi Sonlandır</button>
+      <button class="pwa-later" onclick="hgKapat()">Biraz daha çalışıyorum</button>`;
+  }
+  $("hosgeldin").classList.add("show");
+}
+
 /* ---------- PWA yükleme ---------- */
 let deferred=null;
 window.addEventListener("beforeinstallprompt",(e)=>{e.preventDefault();deferred=e;$("installBtn").classList.add("show");$("pwaKur").style.display="block";});
@@ -1138,6 +1218,7 @@ function pwaRehberGoster(){
   // Zaten kuruluysa (standalone) veya "Anladım" denmişse gösterme
   const kurulu = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   if (kurulu || localStorage.getItem("xre-pwa-rehber")) return;
+  if ($("hosgeldin").classList.contains("show")){ setTimeout(pwaRehberGoster, 4000); return; }
   // Sadece mobil cihazlarda göster
   if (!/iphone|ipad|ipod|android/i.test(navigator.userAgent)) return;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -1164,7 +1245,7 @@ egimBagla(document.querySelector(".login-card"), 5);
 window.addEventListener("online",  ()=>{ if (dirty) planla(200); });
 document.addEventListener("visibilitychange", ()=>{
   if (document.visibilityState === "hidden") flushBeacon();       // arka plana/kapatmaya karşı
-  else { rozetGuncelle(); if (dirty) planla(200); }               // geri dönünce hemen dene
+  else { rozetGuncelle(); if (dirty) planla(200); hosgeldinGoster(); } // geri dönünce hemen dene
 });
 window.addEventListener("pagehide", flushBeacon);
 window.addEventListener("beforeunload", flushBeacon);
@@ -1175,7 +1256,7 @@ let konumIsitSay = 0;
 setInterval(()=>{
   if (!OT) return;
   // Uygulama gece boyunca açık kaldıysa: bitmiş/başlamamış günü yeni güne çevir
-  if (S.gun !== bugunStr() && (S.durum==="hazir" || S.durum==="bitti")){ S = bosGun(); ciz(); selamla(); }
+  if (S.gun !== bugunStr() && (S.durum==="hazir" || S.durum==="bitti")){ S = bosGun(); ciz(); selamla(); hosgeldinGoster(); }
   if (S.durum==="calisiyor" || S.durum==="molada"){
     isaretle();
     if (document.visibilityState==="visible" && ++konumIsitSay % 5 === 0) konumIsit();
