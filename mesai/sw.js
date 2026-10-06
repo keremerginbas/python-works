@@ -1,4 +1,4 @@
-const CACHE = "xre-mesai-v14";
+const CACHE = "xre-mesai-v15";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./logo.png", "./icon-192-v2.png", "./icon-512-v2.png"];
 
 self.addEventListener("install", (e) => {

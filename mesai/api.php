@@ -15,6 +15,12 @@
 define("XRE_API", 1);
 require __DIR__ . "/config.php"; // gizli ayarlar (token, webhook, admin hash)
 
+/* config.php'de tanımlı değilse varsayılanlar (eski config dosyaları da çalışsın) */
+$GUNLUK_RAPOR_SAAT = $GUNLUK_RAPOR_SAAT ?? 20;  // her akşam bu saatte o günün toplu raporu (false = kapalı)
+$CRON_ANAHTAR      = $CRON_ANAHTAR ?? "";       // URL ile cron tetiklemek için gizli anahtar (boş = yalnız CLI)
+$CLI = (PHP_SAPI === "cli");
+ignore_user_abort(true); // yanıt gittikten sonraki arka plan işleri yarıda kalmasın
+
 header("Content-Type: application/json; charset=utf-8");
 header("X-Content-Type-Options: nosniff");
 header("X-Frame-Options: DENY");
@@ -76,6 +82,9 @@ $db->exec("CREATE TABLE IF NOT EXISTS bitrix_log(
   gun TEXT, eski TEXT, yeni TEXT, metot TEXT,
   ok INTEGER, http INTEGER, sebep TEXT)");
 $db->exec("CREATE INDEX IF NOT EXISTS ix_bxlog_zaman ON bitrix_log(zaman DESC)");
+/* Zamanlanmış işler (günlük toplu rapor vb.) — aynı işin iki kez çalışmasını engeller */
+$db->exec("CREATE TABLE IF NOT EXISTS gorevler(
+  anahtar TEXT PRIMARY KEY, durum TEXT NOT NULL, zaman INTEGER, notlar TEXT)");
 
 /* ---- brute-force koruması ---- */
 function rlAnahtar($ek){ return sha1(($_SERVER["REMOTE_ADDR"] ?? "?") . "|" . $ek); }
@@ -103,35 +112,234 @@ function rlTemizle($db, $anahtar){
 function fmtSaatPHP($ms){
   $dk = intdiv(max(0,$ms), 60000); $h = intdiv($dk,60); $m = $dk%60;
   if (!$h && !$m) return max(0, intdiv($ms,1000)) . " sn";
-  return $h ? "$h sa $m dk" : "$m dk";
+  return $h ? ($m ? "$h sa $m dk" : "$h sa") : "$m dk";
 }
-function raporMetni($ad, $veri){
-  $MOLA = ["randevu"=>["Online Randevu",true], "cay"=>["Çay Molası",false], "yemek"=>["Yemek Molası",false], "tuvalet"=>["Tuvalet Molası",false]];
-  $calisma = 0; $molalar = [];
-  foreach (($veri["segs"] ?? []) as $s) {
-    $d = ($s["bit"] ?? 0) - ($s["bas"] ?? 0);
-    if ($d <= 0) continue;
-    $tip = $s["tip"] ?? "";
-    if ($tip === "calisma" || $tip === "onhazirlik") $calisma += $d;
-    elseif (isset($MOLA[$tip])) {
-      $molalar[$tip] = ($molalar[$tip] ?? 0) + $d;
-      if ($MOLA[$tip][1]) $calisma += $d;
-    }
+/* Mola tipleri — index.html'deki MOLA ile aynı anahtarlar.
+   sayilir=true olanlar (online randevu) çalışma süresine eklenir. */
+const MOLA_TIPLERI = [
+  "cay"     => ["ad"=>"Çay",            "emoji"=>"☕", "sayilir"=>false,
+                "cikis"=>"çay molasına çıktı",       "donus"=>"çay molasından döndü",     "ozet"=>"çay molası verdi"],
+  "yemek"   => ["ad"=>"Yemek",          "emoji"=>"🍽", "sayilir"=>false,
+                "cikis"=>"yemek molasına çıktı",     "donus"=>"yemek molasından döndü",   "ozet"=>"yemek molası verdi"],
+  "tuvalet" => ["ad"=>"Tuvalet",        "emoji"=>"🚻", "sayilir"=>false,
+                "cikis"=>"tuvalet molasına çıktı",   "donus"=>"tuvalet molasından döndü", "ozet"=>"tuvalet molası verdi"],
+  "randevu" => ["ad"=>"Online randevu", "emoji"=>"🎥", "sayilir"=>true,
+                "cikis"=>"online randevuya başladı", "donus"=>"online randevuyu bitirdi", "ozet"=>"online randevu yaptı"],
+];
+
+function saatMs($ms){ return date("H:i", (int)($ms / 1000)); }
+
+/* Bir günün özetini çıkarır. $acikBitisMs verilirse hâlâ açık olan segment o ana kadar sayılır. */
+function gunOzet($v, $acikBitisMs = null){
+  $segs = is_array($v["segs"] ?? null) ? $v["segs"] : [];
+  $acik = in_array($v["durum"] ?? "", ["calisiyor","molada"], true) && !empty($v["bas"]);
+  if ($acik && $acikBitisMs && $acikBitisMs > (int)$v["bas"])
+    $segs[] = ["tip"=>($v["tip"] ?: "calisma"), "bas"=>(int)$v["bas"], "bit"=>(int)$acikBitisMs];
+  $o = ["calisma"=>0, "mola"=>0, "molalar"=>[], "adet"=>[], "liste"=>[], "ilk"=>null, "son"=>null, "acik"=>$acik];
+  foreach ($segs as $s) {
+    $a = (int)($s["bas"] ?? 0); $b = (int)($s["bit"] ?? 0); $t = (string)($s["tip"] ?? "");
+    if (!$a || !$b || $b <= $a) continue;
+    $d = $b - $a;
+    if ($t === "calisma" || $t === "onhazirlik") $o["calisma"] += $d;
+    elseif (isset(MOLA_TIPLERI[$t])) {
+      $o["molalar"][$t] = ($o["molalar"][$t] ?? 0) + $d;
+      $o["adet"][$t] = ($o["adet"][$t] ?? 0) + 1;
+      $o["liste"][] = ["tip"=>$t, "bas"=>$a, "bit"=>$b];
+      if (MOLA_TIPLERI[$t]["sayilir"]) $o["calisma"] += $d; else $o["mola"] += $d;
+    } else continue;
+    $o["ilk"] = $o["ilk"] === null ? $a : min($o["ilk"], $a);
+    $o["son"] = $o["son"] === null ? $b : max($o["son"], $b);
   }
+  return $o;
+}
+
+/* Mesai bitiş raporu. $detay=true → Bitrix rapor alanı için her molayı saatleriyle listeler. */
+function raporMetni($ad, $veri, $detay = false){
+  $o = gunOzet($veri);
   $ilk = explode(" ", trim($ad))[0];
-  $m = "📋 $ilk bugün " . fmtSaatPHP($calisma) . " çalıştı";
-  if (!empty($molalar["yemek"])) $m .= ", " . fmtSaatPHP($molalar["yemek"]) . " yemek molasına çıktı";
-  if (!empty($molalar["cay"]))   $m .= ", " . fmtSaatPHP($molalar["cay"]) . " çay molasına çıktı";
-  if (!empty($molalar["randevu"])) $m .= ", " . fmtSaatPHP($molalar["randevu"]) . " online randevuda kaldı";
+  $m = "📋 $ilk bugün " . fmtSaatPHP($o["calisma"]) . " çalıştı";
+  foreach (["yemek","cay","tuvalet"] as $t)
+    if (!empty($o["molalar"][$t])) $m .= ", " . fmtSaatPHP($o["molalar"][$t]) . " " . MOLA_TIPLERI[$t]["cikis"];
+  if (!empty($o["molalar"]["randevu"])) $m .= ", " . fmtSaatPHP($o["molalar"]["randevu"]) . " online randevuda kaldı";
   $m .= ".";
+  if ($o["ilk"]) $m .= "\n🕘 " . saatMs($o["ilk"]) . " – " . saatMs($o["son"])
+                   . ($o["mola"] ? " · toplam mola " . fmtSaatPHP($o["mola"]) : " · mola yok");
+  if ($detay && $o["liste"]) {
+    $m .= "\nMolalar:";
+    foreach ($o["liste"] as $l)
+      $m .= "\n  " . MOLA_TIPLERI[$l["tip"]]["emoji"] . " " . MOLA_TIPLERI[$l["tip"]]["ad"] . " "
+          . saatMs($l["bas"]) . "–" . saatMs($l["bit"]) . " (" . fmtSaatPHP($l["bit"] - $l["bas"]) . ")";
+  }
   $g = $veri["girisKonum"] ?? null; $c = $veri["cikisKonum"] ?? null;
   $m .= "\n" . konumSatiri("Giriş", $g);
   $m .= "\n" . konumSatiri("Çıkış", $c);
   return $m;
 }
+
+/* ---------------- Günlük toplu rapor ---------------- */
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8"); }
+function tarihUzun($gun){
+  $ay = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+  $gn = ["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"];
+  $t = strtotime($gun . " 12:00:00");
+  return (int)date("j",$t) . " " . $ay[(int)date("n",$t)-1] . " " . date("Y",$t) . ", " . $gn[(int)date("w",$t)];
+}
+
+/* Varsayılan rapor günü: rapor saati geçtiyse bugün, değilse dün */
+function varsayilanRaporGunu(){
+  global $GUNLUK_RAPOR_SAAT;
+  $saat = $GUNLUK_RAPOR_SAAT === false ? 20 : (int)$GUNLUK_RAPOR_SAAT;
+  return (int)date("G") >= $saat ? date("Y-m-d") : date("Y-m-d", strtotime("-1 day"));
+}
+
+/* Telegram HTML metin parçaları (kişi blokları) döner; o gün hiç kayıt yoksa null. */
+function gunlukRaporParcalari($db, $gun){
+  $bugun = ($gun === date("Y-m-d"));
+  $nowMs = (int)round(microtime(true) * 1000);
+  $q = $db->prepare("SELECT g.user_id, g.veri, g.guncelleme, u.ad FROM gunler g
+                     JOIN users u ON u.id=g.user_id WHERE g.gun=? AND u.aktif=1");
+  $q->execute([$gun]);
+  $kisiler = []; $calisanIds = [];
+  foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+    $v = json_decode($r["veri"], true) ?: [];
+    // Açık mesai: bugünse şu ana kadar, geçmiş günse uygulamanın son bildirdiği ana kadar say
+    $o = gunOzet($v, $bugun ? $nowMs : (int)$r["guncelleme"] * 1000);
+    if ($o["calisma"] + $o["mola"] <= 0) continue;
+    $kisiler[] = ["ad"=>$r["ad"], "o"=>$o];
+    $calisanIds[(int)$r["user_id"]] = 1;
+  }
+  if (!$kisiler) return null;
+  usort($kisiler, fn($a,$b) => $b["o"]["calisma"] <=> $a["o"]["calisma"]);
+
+  $parcalar = ["📊 <b>GÜNLÜK MESAİ RAPORU</b>\n🗓 " . h(tarihUzun($gun))];
+  $toplam = 0; $kapatmayan = [];
+  foreach ($kisiler as $i => $k) {
+    $o = $k["o"]; $toplam += $o["calisma"];
+    $sira = $i < 3 ? ["🥇","🥈","🥉"][$i] : ($i + 1) . ".";
+    $b = "$sira <b>" . h($k["ad"]) . "</b> — " . fmtSaatPHP($o["calisma"]) . " çalıştı";
+    $molalar = [];
+    foreach (["cay","yemek","tuvalet","randevu"] as $t) if (!empty($o["molalar"][$t])) {
+      $adet = $o["adet"][$t] > 1 ? " ({$o["adet"][$t]}×)" : "";
+      $molalar[] = MOLA_TIPLERI[$t]["emoji"] . " " . MOLA_TIPLERI[$t]["ad"] . " " . fmtSaatPHP($o["molalar"][$t]) . $adet;
+    }
+    $b .= "\n      " . ($molalar ? implode(" · ", $molalar) : "Mola yok")
+        . ($o["mola"] && count($molalar) > 1 ? " → toplam mola " . fmtSaatPHP($o["mola"]) : "");
+    $b .= "\n      🕘 " . saatMs($o["ilk"]) . " – " . ($o["acik"] && $bugun ? "şu an" : saatMs($o["son"]))
+        . ($o["acik"] ? ($bugun ? " 🟢 hâlâ mesaide" : " ⚠️ mesai kapatılmadı") : "");
+    if ($o["acik"]) $kapatmayan[] = h(explode(" ", trim($k["ad"]))[0]);
+    $parcalar[] = $b;
+  }
+
+  $hic = [];
+  foreach ($db->query("SELECT id, ad FROM users WHERE aktif=1 ORDER BY ad")->fetchAll(PDO::FETCH_ASSOC) as $u)
+    if (empty($calisanIds[(int)$u["id"]])) $hic[] = h($u["ad"]);
+
+  $son = "━━━━━━━━━━━━\n👥 " . count($kisiler) . " kişi · ⏱ toplam " . fmtSaatPHP($toplam)
+       . " · ort. " . fmtSaatPHP((int)round($toplam / count($kisiler))) . "/kişi";
+  if ($kapatmayan) $son .= $bugun
+    ? "\n🟢 <b>Hâlâ mesaide:</b> " . implode(", ", $kapatmayan) . " (süre rapor anına kadar sayıldı)"
+    : "\n⚠️ <b>Mesaiyi kapatmayan:</b> " . implode(", ", $kapatmayan) . " (süre son bildirime kadar sayıldı)";
+  if ($hic) $son .= "\n🚫 <b>Kayıt yok:</b> " . implode(", ", $hic);
+  $parcalar[] = $son;
+  return $parcalar;
+}
+
+/* Parçaları Telegram'ın 4096 karakter sınırına göre mesajlara böler */
+function parcalariBirlestir($parcalar, $sinir = 3500){
+  $mesajlar = []; $cur = "";
+  foreach ($parcalar as $p) {
+    if ($cur !== "" && mb_strlen($cur . "\n\n" . $p) > $sinir) { $mesajlar[] = $cur; $cur = $p; }
+    else $cur = $cur === "" ? $p : $cur . "\n\n" . $p;
+  }
+  if ($cur !== "") $mesajlar[] = $cur;
+  return $mesajlar;
+}
+
+/* Aynı işin (ör. "gunluk:2026-10-05") bir kez çalışmasını sağlar.
+   Başarısız/yarıda kalmış iş $tekrarSn sonra yeniden alınabilir. */
+function gorevAl($db, $anahtar, $tekrarSn = 600){
+  $now = time();
+  $db->prepare("INSERT OR IGNORE INTO gorevler(anahtar,durum,zaman) VALUES(?,'bekliyor',0)")->execute([$anahtar]);
+  $s = $db->prepare("UPDATE gorevler SET durum='calisiyor', zaman=? WHERE anahtar=?
+                     AND (durum='bekliyor' OR (durum<>'tamam' AND zaman < ?))");
+  $s->execute([$now, $anahtar, $now - $tekrarSn]);
+  return $s->rowCount() === 1;
+}
+function gorevBitir($db, $anahtar, $ok, $not = ""){
+  $db->prepare("UPDATE gorevler SET durum=?, zaman=?, notlar=? WHERE anahtar=?")
+     ->execute([$ok ? "tamam" : "hata", time(), mb_substr((string)$not, 0, 400), $anahtar]);
+}
+
+/* $zorla=false: o gün için zaten gönderildiyse tekrar göndermez (cron + yedek tetik çakışmasın). */
+function gunlukRaporGonder($db, $gun, $zorla = false){
+  $anahtar = "gunluk:$gun";
+  if ($zorla) {
+    $db->prepare("INSERT OR IGNORE INTO gorevler(anahtar,durum,zaman) VALUES(?,'bekliyor',0)")->execute([$anahtar]);
+  } elseif (!gorevAl($db, $anahtar)) {
+    return ["ok"=>true, "atla"=>true, "sebep"=>"$gun raporu zaten gönderildi"];
+  }
+  $parcalar = gunlukRaporParcalari($db, $gun);
+  if (!$parcalar) { gorevBitir($db, $anahtar, true, "kayıt yok"); return ["ok"=>true, "atla"=>true, "sebep"=>"$gun için mesai kaydı yok"]; }
+  $ok = true; $sebep = "";
+  foreach (parcalariBirlestir($parcalar) as $metin) {
+    $r = telegramGonder($metin, true);
+    if (!$r["ok"]) { $ok = false; $sebep = $r["sebep"]; break; }
+  }
+  gorevBitir($db, $anahtar, $ok, $sebep);
+  return ["ok"=>$ok, "sebep"=>$ok ? "$gun raporu gönderildi" : $sebep];
+}
+
+/* Mesai bitiş raporunu bir kez gönderir (rapor_gitti: 0=gitmedi, 2=gönderiliyor, 1=gitti) */
+function bitisRaporuGonder($db, $uid, $gun, $ad, $veriArr){
+  $s = $db->prepare("UPDATE gunler SET rapor_gitti=2 WHERE user_id=? AND gun=? AND rapor_gitti=0");
+  $s->execute([$uid, $gun]);
+  if ($s->rowCount() !== 1) return null; // başka bir istek gönderdi / gönderiyor
+  $r = telegramGonder(raporMetni($ad, $veriArr));
+  if ($r["ok"]) $db->prepare("UPDATE gunler SET rapor_gitti=1 WHERE user_id=? AND gun=?")->execute([$uid, $gun]);
+  else $db->prepare("UPDATE gunler SET rapor_gitti=0, guncelleme=? WHERE user_id=? AND gun=?")->execute([time(), $uid, $gun]);
+  return $r;
+}
+
+/* Çıkış konumu beklenirken ertelenen ya da gönderilemeyen bitiş raporlarını gönder */
+function bekleyenRaporlar($db){
+  $s = $db->prepare("SELECT g.user_id, g.gun, g.veri, u.ad FROM gunler g JOIN users u ON u.id=g.user_id
+                     WHERE g.gun=? AND g.rapor_gitti=0 AND g.guncelleme BETWEEN ? AND ?
+                     AND g.veri LIKE '%\"durum\":\"bitti\"%'");
+  $s->execute([date("Y-m-d"), time() - 6*3600, time() - 45]);
+  foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r)
+    bitisRaporuGonder($db, (int)$r["user_id"], $r["gun"], $r["ad"], json_decode($r["veri"], true) ?: []);
+}
+
+/* Yanıt kullanıcıya gittikten sonra çalışan işler. Cron kurulmamış olsa bile
+   saat 20:00'den sonraki ilk istekte o günün toplu raporu gider (yedek tetik).
+   20:00'den sonra hiç istek gelmediyse, ertesi sabah 12:00'ye kadar gelen ilk
+   istekte bir önceki günün raporu gönderilir. */
+function arkaPlanIsleri(){
+  global $db, $GUNLUK_RAPOR_SAAT, $CLI;
+  if ($CLI || !isset($db)) return;
+  if (function_exists("fastcgi_finish_request")) @fastcgi_finish_request();
+  elseif (function_exists("litespeed_finish_request")) @litespeed_finish_request();
+  try {
+    bekleyenRaporlar($db);
+    if ($GUNLUK_RAPOR_SAAT !== false) {
+      $saat = (int)date("G");
+      $gun = null;
+      if ($saat >= (int)$GUNLUK_RAPOR_SAAT) $gun = date("Y-m-d");
+      elseif ($saat < 12) $gun = date("Y-m-d", strtotime("-1 day"));
+      if ($gun) {
+        $s = $db->prepare("SELECT durum FROM gorevler WHERE anahtar=?");
+        $s->execute(["gunluk:$gun"]);
+        if ($s->fetchColumn() !== "tamam") gunlukRaporGonder($db, $gun);
+      }
+    }
+  } catch (Throwable $e) {}
+}
+register_shutdown_function("arkaPlanIsleri");
 function konumSatiri($ad, $k){
-  if (!$k || !empty($k["hata"]) || !isset($k["lat"]))
-    return "⚠️ $ad konumu alınamadı";
+  if (!$k || !empty($k["hata"]) || !isset($k["lat"])) {
+    $neden = is_array($k) && !empty($k["neden"]) ? " (" . mb_substr((string)$k["neden"], 0, 40) . ")" : "";
+    return "⚠️ $ad konumu alınamadı$neden";
+  }
   $url = "https://maps.google.com/?q={$k["lat"]},{$k["lng"]}";
   $d = (int)($k["dogruluk"] ?? 0);
   if ($d > 0 && $d <= 100)  return "📍 $ad: $url (±{$d} m ✅)";
@@ -289,11 +497,12 @@ function bitrixSenkron($db, $u, $gun, $yeniDurum, $rapor = ""){
 }
 
 /* ---------------- Telegram ---------------- */
-function telegramGonder($metin){
+function telegramGonder($metin, $html = false){
   global $TG_TOKEN, $TG_CHAT;
   if (empty($TG_TOKEN) || empty($TG_CHAT)) return ["ok"=>false, "sebep"=>"token/chat ayarlanmamış"];
   $url = "https://api.telegram.org/bot$TG_TOKEN/sendMessage";
   $alanlar = ["chat_id"=>$TG_CHAT, "text"=>$metin, "disable_web_page_preview"=>1];
+  if ($html) $alanlar["parse_mode"] = "HTML";
   if (function_exists("curl_init")) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_RETURNTRANSFER=>true,
@@ -310,9 +519,16 @@ function telegramGonder($metin){
 }
 
 /* ---------------- İstek ayrıştırma ---------------- */
-$ham = file_get_contents("php://input");
+$ham = $CLI ? "" : file_get_contents("php://input");
 $in = json_decode($ham, true) ?: [];
 $act = $_GET["action"] ?? $in["action"] ?? "";
+/* Komut satırı (cron) yalnızca günlük raporu çalıştırır:
+   php api.php            → 20:00'den sonra bugünün, önce ise dünün raporu
+   php api.php 2026-10-05 → belirli günün raporu (o gün zaten gönderildiyse atlar) */
+if ($CLI) {
+  $act = "gunluk_rapor_cron";
+  foreach (array_slice($argv ?? [], 1) as $arg) if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $arg)) $_GET["gun"] = $arg;
+}
 
 /* ---- kullanıcı doğrulama ---- */
 function auth($db){
@@ -381,20 +597,25 @@ case "gun_kaydet":
   if (!is_array($veriArr)) err("Geçersiz veri");
   $veri = json_encode($veriArr, JSON_UNESCAPED_UNICODE);
 
-  // Önceki kayıtlı durumu al
-  $s = $db->prepare("SELECT veri, bx_hedef, bx_zaman FROM gunler WHERE user_id=? AND gun=?");
-  $s->execute([$u["id"], $gun]);
-  $satir = $s->fetch(PDO::FETCH_ASSOC) ?: [];
+  // Önceki durumu oku + yeni durumu yaz: tek kilit altında. Böylece aynı anda gelen
+  // iki istek (ör. normal kayıt + sekme kapanırken beacon) aynı geçişi iki kez
+  // görmez ve Telegram'a mükerrer bildirim gitmez.
+  $db->exec("BEGIN IMMEDIATE");
+  try {
+    $s = $db->prepare("SELECT veri, bx_hedef, bx_zaman FROM gunler WHERE user_id=? AND gun=?");
+    $s->execute([$u["id"], $gun]);
+    $satir = $s->fetch(PDO::FETCH_ASSOC) ?: [];
+    // Kayıt kaynağı DB'dir; Bitrix/Telegram yan etkidir.
+    $db->prepare("INSERT INTO gunler(user_id,gun,veri,guncelleme) VALUES(?,?,?,?)
+      ON CONFLICT(user_id,gun) DO UPDATE SET veri=excluded.veri, guncelleme=excluded.guncelleme")
+      ->execute([$u["id"], $gun, $veri, time()]);
+    $db->exec("COMMIT");
+  } catch (Throwable $e) { try { $db->exec("ROLLBACK"); } catch (Throwable $e2) {} throw $e; }
   $eski = json_decode($satir["veri"] ?? "{}", true) ?: [];
   $eskiDurum = $eski["durum"] ?? "hazir";
   $yeniDurum = $veriArr["durum"] ?? "hazir";
   $bxHedefEski = $satir["bx_hedef"] ?? null;
   $bxZaman = (int)($satir["bx_zaman"] ?? 0);
-
-  // Her zaman önce yaz — kayıt kaynağı DB'dir; Bitrix/Telegram yan etkidir.
-  $db->prepare("INSERT INTO gunler(user_id,gun,veri,guncelleme) VALUES(?,?,?,?)
-    ON CONFLICT(user_id,gun) DO UPDATE SET veri=excluded.veri, guncelleme=excluded.guncelleme")
-    ->execute([$u["id"], $gun, $veri, time()]);
 
   // ---- Bitrix senkron (kendi kendini onaran) ----
   $bxSonuc = null;
@@ -408,7 +629,7 @@ case "gun_kaydet":
     $tazele = $durumDegisti || $bxHedefEski !== $hedef || (time() - $bxZaman) > 240;
     if ($tazele) {
       try {
-        $bxRapor = ($yeniDurum === "bitti") ? raporMetni($u["ad"], $veriArr) : "";
+        $bxRapor = ($yeniDurum === "bitti") ? raporMetni($u["ad"], $veriArr, true) : "";
         $bxSonuc = bitrixSenkron($db, $u, $gun, $yeniDurum, $bxRapor);
         if ($bxSonuc["ok"]) {
           $db->prepare("UPDATE gunler SET bx_hedef=?, bx_zaman=? WHERE user_id=? AND gun=?")
@@ -424,46 +645,70 @@ case "gun_kaydet":
   }
 
   // ---- Telegram bildirimleri ----
+  // Geçişler hem durum hem segment kimliğiyle (bas zaman damgası) tespit edilir;
+  // böylece çevrimdışıyken birleşen olaylar da (ör. mola+dönüş) kaybolmaz.
   $tgSonuc = null;
   try {
-    // Mesai başlangıç bildirimi: hazir/bitti -> calisiyor (moladan dönüş hariç)
-    if ($eskiDurum !== "calisiyor" && $eskiDurum !== "molada" && $yeniDurum === "calisiyor") {
-      $s = $db->prepare("SELECT basla_gitti FROM gunler WHERE user_id=? AND gun=?");
-      $s->execute([$u["id"], $gun]);
-      if (!(int)$s->fetchColumn()) {
-        $saat = date("H:i");
-        $tgSonuc = telegramGonder("🟢 {$u["ad"]} $saat'te mesaisini başlattı.");
-        if ($tgSonuc["ok"])
-          $db->prepare("UPDATE gunler SET basla_gitti=1 WHERE user_id=? AND gun=?")->execute([$u["id"], $gun]);
+    $ad = $u["ad"];
+    $nowMs = (int)round(microtime(true) * 1000);
+    $segsYeni = is_array($veriArr["segs"] ?? null) ? $veriArr["segs"] : [];
+    $acikDurum = ["calisiyor","molada"];
+    $yakinGun = $gun >= date("Y-m-d", strtotime("-1 day"));
+
+    if ($bugunMu) {
+      // 1) Mesai başlangıcı (günün ilk başlatması bir kez bildirilir)
+      if ($eskiDurum === "hazir" && $yeniDurum !== "hazir") {
+        $s = $db->prepare("UPDATE gunler SET basla_gitti=1 WHERE user_id=? AND gun=? AND basla_gitti=0");
+        $s->execute([$u["id"], $gun]);
+        if ($s->rowCount() === 1) {
+          $basMs = (int)($segsYeni[0]["bas"] ?? ($veriArr["bas"] ?? 0));
+          $tgSonuc = telegramGonder("🟢 $ad — " . ($basMs ? saatMs($basMs) : date("H:i")) . ": mesaisini başlattı.");
+          if (!$tgSonuc["ok"]) $db->prepare("UPDATE gunler SET basla_gitti=0 WHERE user_id=? AND gun=?")->execute([$u["id"], $gun]);
+        }
+      }
+      // 1b) Bitirdikten sonra yeniden başladı
+      if ($eskiDurum === "bitti" && in_array($yeniDurum, $acikDurum, true)) {
+        $db->prepare("UPDATE gunler SET rapor_gitti=0 WHERE user_id=? AND gun=?")->execute([$u["id"], $gun]);
+        $basMs = (int)($veriArr["bas"] ?? 0);
+        $tgSonuc = telegramGonder("🔄 $ad — " . ($basMs ? saatMs($basMs) : date("H:i")) . ": mesaisine yeniden başladı.");
+      }
+
+      // 2) Moladan dönüş: sunucunun daha önce görmediği, kapanmış mola segmentleri
+      if ($yeniDurum !== "bitti") {
+        $eskiBaslar = [];
+        foreach (($eski["segs"] ?? []) as $es) $eskiBaslar[(int)($es["bas"] ?? 0)] = 1;
+        $yeniMolalar = array_values(array_filter($segsYeni, fn($sg) =>
+          isset(MOLA_TIPLERI[$sg["tip"] ?? ""]) && !empty($sg["bas"]) && !empty($sg["bit"])
+          && empty($eskiBaslar[(int)$sg["bas"]])));
+        foreach (array_slice($yeniMolalar, -3) as $sg) {
+          $m = MOLA_TIPLERI[$sg["tip"]];
+          $bas = (int)$sg["bas"]; $bit = (int)$sg["bit"]; $sure = fmtSaatPHP($bit - $bas);
+          if ($eskiDurum === "molada" && (int)($eski["bas"] ?? 0) === $bas) {
+            $tgSonuc = telegramGonder("▶️ $ad — " . saatMs($bit) . ": $sure {$m["donus"]}, çalışmaya devam ediyor.");
+          } elseif ($bit > $nowMs - 30 * 60000) {
+            // Başlangıcı hiç bildirilmemiş (çevrimdışı/hızlı geçiş) mola: tek özet mesaj
+            $tgSonuc = telegramGonder("{$m["emoji"]} $ad — " . saatMs($bas) . "–" . saatMs($bit) . ": $sure {$m["ozet"]}, çalışmaya döndü.");
+          }
+        }
+      }
+
+      // 3) Mola başlangıcı (yeni bir mola segmenti açıldıysa)
+      if ($yeniDurum === "molada" &&
+          ($eskiDurum !== "molada" || (int)($eski["bas"] ?? 0) !== (int)($veriArr["bas"] ?? 0))) {
+        $molaTipi = $veriArr["tip"] ?? "";
+        if (is_string($molaTipi) && isset(MOLA_TIPLERI[$molaTipi])) {
+          $m = MOLA_TIPLERI[$molaTipi];
+          $molaBas = $veriArr["bas"] ?? null;
+          $saat = is_numeric($molaBas) && $molaBas > 0 ? saatMs($molaBas) : date("H:i");
+          $tgSonuc = telegramGonder("{$m["emoji"]} $ad — $saat: {$m["cikis"]}.");
+        }
       }
     }
-    // Yalnızca yeni mola geçişinde bildir; otomatik kayıtlar tekrar göndermez.
-    if ($bugunMu && $yeniDurum === "molada" &&
-        ($eskiDurum !== "molada" || ($eski["tip"] ?? null) !== ($veriArr["tip"] ?? null))) {
-      $molaMesajlari = [
-        "cay" => ["☕", "çay molasına çıktı"],
-        "yemek" => ["🍽", "yemek molasına çıktı"],
-        "tuvalet" => ["🚻", "tuvalet molasına çıktı"],
-        "randevu" => ["🎥", "online randevuya başladı"]
-      ];
-      $molaTipi = $veriArr["tip"] ?? "";
-      if (is_string($molaTipi) && isset($molaMesajlari[$molaTipi])) {
-        [$emoji, $eylem] = $molaMesajlari[$molaTipi];
-        $molaBas = $veriArr["bas"] ?? null;
-        $saat = date("H:i", is_numeric($molaBas) && $molaBas > 0 ? (int)($molaBas / 1000) : time());
-        $tgSonuc = telegramGonder("$emoji {$u["ad"]} — $saat: $eylem.");
-      }
-    }
-    if ($yeniDurum === "bitti") {
-      $s = $db->prepare("SELECT rapor_gitti FROM gunler WHERE user_id=? AND gun=?");
-      $s->execute([$u["id"], $gun]);
-      if (!(int)$s->fetchColumn()) {
-        $tgSonuc = telegramGonder(raporMetni($u["ad"], $veriArr));
-        if ($tgSonuc["ok"])
-          $db->prepare("UPDATE gunler SET rapor_gitti=1 WHERE user_id=? AND gun=?")->execute([$u["id"], $gun]);
-      }
-    } elseif ($eskiDurum === "bitti" && $yeniDurum === "calisiyor") {
-      $db->prepare("UPDATE gunler SET rapor_gitti=0, basla_gitti=0 WHERE user_id=? AND gun=?")->execute([$u["id"], $gun]);
+
+    // 4) Mesai bitiş raporu. Uygulama çıkış konumunu hâlâ alıyorsa (konumBekliyor) bekle:
+    //    konum gelince uygulama tekrar kaydeder; uygulama kapanırsa arka plan işi 45 sn sonra gönderir.
+    if ($yeniDurum === "bitti" && $yakinGun) {
+      if (empty($veriArr["konumBekliyor"])) $tgSonuc = bitisRaporuGonder($db, $u["id"], $gun, $ad, $veriArr) ?? $tgSonuc;
     }
   } catch (Throwable $e) { $tgSonuc = ["ok"=>false, "sebep"=>"Telegram hatası"]; }
 
@@ -630,6 +875,29 @@ case "mesai_raporu":
   $oz["gunluk_ortalama_ms"]=$oz["gun_sayisi"]?round($oz["calisma_ms"]/$oz["gun_sayisi"]):0;
   out(["ok"=>true,"bas"=>$bas,"bit"=>$bit,"ozet"=>$oz,"kullanicilar"=>$users,"personeller"=>array_values($people),"gunler"=>$days]);
 
+/* ---- Günlük toplu rapor ----
+   Önizleme (GET) veya elle gönderim (POST {gun, gonder:true}). */
+case "gunluk_rapor":
+  adminAuth();
+  $gun = $in["gun"] ?? $_GET["gun"] ?? varsayilanRaporGunu();
+  if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $gun)) err("Geçersiz tarih");
+  if (!empty($in["gonder"])) out(gunlukRaporGonder($db, $gun, true));
+  $p = gunlukRaporParcalari($db, $gun);
+  $s = $db->prepare("SELECT durum, zaman, notlar FROM gorevler WHERE anahtar=?");
+  $s->execute(["gunluk:$gun"]); $g = $s->fetch(PDO::FETCH_ASSOC) ?: null;
+  out(["ok"=>true, "gun"=>$gun, "mesajlar"=>$p ? parcalariBirlestir($p) : [], "gorev"=>$g,
+       "saat"=>$GUNLUK_RAPOR_SAAT, "cron_url"=>$CRON_ANAHTAR !== ""]);
+
+/* Cron: "php api.php" (CLI)  ya da  api.php?action=cron&anahtar=GIZLI (URL)
+   20:00'den sonra çalışırsa bugünün, önce çalışırsa dünün raporu; aynı gün için ikinci kez göndermez. */
+case "cron":
+case "gunluk_rapor_cron":
+  $yetkili = $CLI || ($act === "cron" && $CRON_ANAHTAR !== "" && hash_equals((string)$CRON_ANAHTAR, (string)($_GET["anahtar"] ?? "")));
+  if (!$yetkili) err("Yetkisiz");
+  $gun = $_GET["gun"] ?? varsayilanRaporGunu();
+  if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $gun)) err("Geçersiz tarih");
+  out(gunlukRaporGonder($db, $gun));
+
 case "telegram_test":
   adminAuth();
   out(telegramGonder("✅ XRE Mesai botu bağlandı — test mesajı."));
@@ -668,7 +936,7 @@ case "bitrix_resync": // seçili kullanıcının bugünkü durumunu Bitrix'e zor
   $v = json_decode($u["veri"] ?? "{}", true) ?: [];
   $durum = $v["durum"] ?? "hazir";
   if ($durum === "hazir") out(["ok"=>true, "sebep"=>"Bugün için kayıtlı bir mesai durumu yok (hazır)."]);
-  $rapor = ($durum === "bitti") ? raporMetni($u["ad"], $v) : "";
+  $rapor = ($durum === "bitti") ? raporMetni($u["ad"], $v, true) : "";
   $sonuc = bitrixSenkron($db, $u, $gun, $durum, $rapor);
   if ($sonuc["ok"]) $db->prepare("UPDATE gunler SET bx_hedef=?, bx_zaman=? WHERE user_id=? AND gun=?")
       ->execute([["calisiyor"=>"OPENED","molada"=>"PAUSED","bitti"=>"CLOSED"][$durum] ?? null, time(), $uid, $gun]);

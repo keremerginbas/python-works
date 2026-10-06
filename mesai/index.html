@@ -33,7 +33,7 @@ body{
     linear-gradient(180deg,var(--bg0) 0%,var(--bg1) 100%);
   background-attachment:fixed;
   min-height:100vh;min-height:100dvh;
-  perspective:1500px;overflow-x:hidden;
+  overflow-x:hidden;
 }
 /* Yaşayan arka plan — sürüklenen ışık kümeleri (aurora) */
 body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;
@@ -292,11 +292,13 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 .sync-not.warn{display:flex;background:#E0764E14;border:1px solid #E0764E44;color:var(--brick)}
 .sync-not.wait{display:flex;background:#D4AF6E10;border:1px solid #D4AF6E3a;color:var(--gold-l)}
 
-/* çevrimdışı üst şeridi */
-.net-bar{position:fixed;top:0;left:0;right:0;z-index:120;transform:translateY(-100%);
+/* bağlantı uyarı şeridi — yalnızca sunucuya GERÇEKTEN ulaşılamadığında görünür.
+   (Eski sürüm transform ile gizleniyordu; body'deki perspective yüzünden şeridin
+   bir kısmı internet varken bile ekranda kalıyordu.) */
+.net-bar{display:none;position:sticky;top:0;z-index:120;
   background:linear-gradient(90deg,#E0764E,#c85f38);color:#1c0f08;font-weight:800;font-size:12.5px;
-  text-align:center;padding:9px 14px;transition:transform .3s;box-shadow:0 6px 18px -6px #000c}
-.net-bar.show{transform:none}
+  text-align:center;padding:9px 14px;box-shadow:0 6px 18px -6px #000c}
+.net-bar.show{display:block;animation:rise .3s ease both}
 
 /* ---------- Sıralama / Skor tablosu (oyunlaştırma) ---------- */
 #pgSira{margin-top:22px}
@@ -317,7 +319,7 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 .benim .bi div{font-size:12px;color:var(--mute);margin-top:2px}
 
 /* podyum */
-.podium{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:end;margin:14px 0 10px}
+.podium{perspective:1200px;display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;align-items:end;margin:14px 0 10px}
 .pod{position:relative;border-radius:18px 18px var(--r-sm) var(--r-sm);padding:14px 8px 12px;text-align:center;
   border:1px solid var(--line);background:linear-gradient(170deg,var(--card-hi),var(--card));
   box-shadow:0 16px 34px -18px #000c,inset 0 1px 0 #ffffff0d;
@@ -370,11 +372,102 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 .konf{position:absolute;top:-16px;width:9px;height:14px;border-radius:2px;opacity:.95;will-change:transform;animation:dus var(--d,2s) linear forwards}
 @keyframes dus{to{transform:translateY(104vh) rotate(760deg);opacity:.85}}
 
+/* ================= Görsel yenileme ================= */
+/* Kullanıcı kartı (sağ üst) */
+.who{display:flex;align-items:center;gap:12px;text-align:left}
+.who-av{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:14px;color:#141B38;background:linear-gradient(135deg,var(--gold-l),var(--gold) 50%,var(--gold-d));
+  box-shadow:0 0 0 3px #D4AF6E22, inset 0 1px 0 #ffffff66}
+.who-t b{font-size:14px;font-weight:800;display:block;line-height:1.25}
+.who-t span{font-size:11.5px;color:var(--mute)}
+.who-r{display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-left:6px}
+.who-r .sync-rozet{margin-top:0}
+.cikis{margin-top:0}
+
+/* Selamlama satırı */
+.hello{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 4px 0}
+.hello h2{font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;font-size:clamp(24px,4.4vw,32px);
+  line-height:1.1;color:var(--ink);letter-spacing:.01em}
+.hello h2 em{font-style:normal;color:var(--gold-l)}
+.hello p{font-size:12.5px;color:var(--mute);font-weight:600;letter-spacing:.03em}
+.durum-pill{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.04em;
+  padding:7px 14px;border-radius:99px;border:1px solid var(--line);background:#10173180;color:var(--mute)}
+.durum-pill i{width:8px;height:8px;border-radius:50%;background:currentColor;font-style:normal}
+.durum-pill.canli i{animation:live 1.6s infinite}
+
+/* Halka içi hedef etiketi + mini istatistikler */
+.ring-goal{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-top:6px}
+.ring-goal b{color:var(--gold-l)}
+.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:20px}
+.mini-stats div{background:#0F153199;border:1px solid var(--line-soft);border-radius:14px;padding:10px 8px;text-align:center}
+.mini-stats small{display:block;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.mini-stats b{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
+
+/* Mola menüsü: 2×2 kutucuk */
+.menu{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:9px;background:#0F1531cc}
+.menu button{flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;
+  padding:16px 8px;border-radius:14px;border:1px solid var(--line-soft)!important;background:linear-gradient(170deg,var(--card-hi),var(--card));
+  transition:transform .15s,border-color .15s,background .15s}
+.menu button:hover{background:linear-gradient(170deg,#28336a,var(--card-hi));border-color:var(--mc,#D4AF6E)!important;transform:translateY(-2px)}
+.menu button:active{transform:scale(.97)}
+.menu .mi{width:46px;height:46px;border-radius:14px;font-size:21px}
+.menu .t{flex:none;font-size:13.5px}
+.menu .tag{font-size:8.5px;padding:2px 7px;border-radius:99px;background:#5B9BE61a;border:1px solid #5B9BE644}
+
+/* Gün zaman çizelgesi */
+.tl{background:linear-gradient(170deg,var(--card-hi),var(--card));border:1px solid var(--line-soft);border-radius:var(--r-md);
+  padding:14px 16px 12px;margin-bottom:12px;box-shadow:0 10px 26px -14px #000c, inset 0 1px 0 #ffffff0d}
+.tl-bar{display:flex;height:16px;border-radius:99px;overflow:hidden;background:#0F1531;gap:2px;
+  box-shadow:inset 0 1px 3px #0008}
+.tl-bar span{display:block;height:100%;min-width:3px;transition:flex-grow .6s ease}
+.tl-bar span.live{background-image:linear-gradient(90deg,transparent,#ffffff40,transparent)!important;
+  background-size:200% 100%;animation:shimmer 1.8s linear infinite}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.tl-ax{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:7px;font-variant-numeric:tabular-nums;font-weight:700}
+.tl-leg{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:11.5px;color:var(--mute);font-weight:600}
+.tl-leg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:0}
+.tl-leg b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* Akış listesinde canlı (açık) segment */
+.seg.live{border-style:dashed;border-left-style:solid;background:linear-gradient(170deg,#26315f,var(--card))}
+.seg .now{font-size:9px;font-weight:800;letter-spacing:.12em;color:#141B38;background:var(--green);padding:2px 7px;border-radius:6px;margin-left:8px;vertical-align:2px}
+.seg .mi{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;border:1px solid #ffffff14}
+
+/* Rapor: 3 kart + mola dağılımı */
+.stats.three{grid-template-columns:repeat(3,1fr)}
+@media(max-width:560px){.stats.three{grid-template-columns:1fr 1fr}.stats.three .stat:last-child{grid-column:1/-1}}
+.stat .alt{font-size:11.5px;color:var(--faint);margin-top:2px;font-weight:600}
+.brk{background:linear-gradient(170deg,var(--card-hi),var(--card));border:1px solid var(--line-soft);border-radius:var(--r-md);
+  padding:14px 16px;margin-top:10px;box-shadow:0 10px 26px -14px #000c}
+.brk-row{display:grid;grid-template-columns:38px 1fr auto;gap:4px 12px;align-items:center;padding:8px 0}
+.brk-row + .brk-row{border-top:1px solid var(--line-soft)}
+.brk-row .mi{grid-row:span 2}
+.brk-row b{font-size:13.5px}
+.brk-row b small{color:var(--faint);font-weight:600;font-size:11.5px;margin-left:6px}
+.brk-row .v{font-weight:800;font-variant-numeric:tabular-nums;font-size:14px;text-align:right}
+.brk-row .bar{grid-column:2/4;height:6px;border-radius:99px;background:#0F1531;overflow:hidden}
+.brk-row .bar span{display:block;height:100%;border-radius:99px;animation:grow .8s cubic-bezier(.2,.8,.2,1) both;transform-origin:left}
+@keyframes grow{from{transform:scaleX(0)}to{transform:none}}
+
+/* Bildirim (toast) */
+#toast{position:fixed;left:50%;bottom:26px;z-index:150;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  width:max-content;max-width:calc(100vw - 32px);text-align:center;background:linear-gradient(170deg,#2a3568,#1d2650);border:1px solid #D4AF6E66;color:var(--ink);
+  font-size:13.5px;font-weight:700;padding:12px 18px;border-radius:14px;box-shadow:0 18px 40px -12px #000e;
+  transition:opacity .25s,transform .25s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:560px){
+  header{gap:12px}
+  .who-t{display:none}
+  .card{padding:26px 18px}
+  .mini-stats b{font-size:13.5px}
+}
+
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<div id="netBar" class="net-bar">⚠️ İnternet bağlantısı yok — kayıtlar telefonda tutuluyor, bağlanınca gönderilecek</div>
+<div id="netBar" class="net-bar">⚠️ Sunucuya ulaşılamıyor — kayıtların cihazında güvende, bağlantı gelince otomatik gönderilecek</div>
 <div id="loginPg" style="display:none">
   <div class="login-card">
     <div class="lg">
@@ -401,8 +494,13 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
       <div class="logo-plate"><img src="logo.png" alt="XRE · X Real Estate Beştepe"></div>
       <div class="brand"><div class="tr" style="margin-top:0">MESAİ TAKİP SİSTEMİ</div></div>
     </div>
-    <div class="who"><b id="whoAd">—</b><span id="whoRol"></span><br><button class="cikis" onclick="cikisYap()">Oturumu kapat</button>
-      <div id="syncRozet" class="sync-rozet" title="Sunucuya kayıt durumu"><span class="dot"></span><span id="syncTxt">—</span></div>
+    <div class="who">
+      <div class="who-av" id="whoAv">—</div>
+      <div class="who-t"><b id="whoAd">—</b><span id="whoRol"></span></div>
+      <div class="who-r">
+        <div id="syncRozet" class="sync-rozet" title="Sunucuya kayıt durumu"><span class="dot"></span><span id="syncTxt">—</span></div>
+        <button class="cikis" onclick="cikisYap()">Oturumu kapat</button>
+      </div>
     </div>
   </header>
 
@@ -413,6 +511,10 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
   </nav>
 
   <div id="pgMesai">
+    <div class="hello">
+      <div><p id="helloTarih"></p><h2 id="helloTxt">Merhaba</h2></div>
+      <span class="durum-pill" id="durumPill"><i></i><span id="durumPillTxt">Mesai başlamadı</span></span>
+    </div>
     <div class="mesai-grid">
       <div class="card" id="tiltCard">
         <div class="state" id="stateTxt">Mesai Başlamadı</div>
@@ -426,7 +528,13 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
           <div class="ring-inner">
             <div class="clock idle" id="clock">00:00:00</div>
             <div class="sub" id="clockSub" style="display:none">Toplam çalışma <b id="totalTxt">00:00:00</b></div>
+            <div class="ring-goal" id="ringGoal">Günlük hedef <b id="goalTxt">%0</b></div>
           </div>
+        </div>
+        <div class="mini-stats">
+          <div><small>Net çalışma</small><b id="msCal" style="color:var(--green)">0 dk</b></div>
+          <div><small>Mola</small><b id="msMola" style="color:var(--gold)">0 dk</b></div>
+          <div><small>Giriş</small><b id="msGiris">—</b></div>
         </div>
         <div id="konumSatir" style="margin-top:14px;font-size:12.5px;display:none"></div>
         <div class="oh" id="ohCard" style="display:none">
@@ -438,6 +546,7 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
       </div>
       <div id="akisSec" style="display:none">
         <h3 class="sec">Bugünün Akışı</h3>
+        <div id="zamanCiz"></div>
         <div id="akis"></div>
       </div>
     </div>
@@ -461,6 +570,7 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 </div>
 
 <div id="konfeti"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <button class="install" id="installBtn">⬇ Uygulamayı Yükle</button>
 
 <script>
@@ -468,6 +578,10 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 const API = "api.php";
 let OT = JSON.parse(localStorage.getItem("xre-oturum") || "null"); // {token, ad, rol, kadi}
 
+/* Bağlantı durumu navigator.onLine'a değil, GERÇEK istek sonucuna göre belirlenir.
+   (Windows/Chrome'da sanal ağ bağdaştırıcıları, VPN vb. yüzünden navigator.onLine
+   internet varken de "false" dönebiliyor.) */
+let agHata = false;
 async function apiCall(action, body){
   const ctrl = new AbortController();
   const zamanAsimi = setTimeout(()=>ctrl.abort(), 15000); // 15 sn üst sınır — asılı kalmayı önler
@@ -479,10 +593,11 @@ async function apiCall(action, body){
       signal: ctrl.signal, keepalive: true, cache: "no-store"
     });
     clearTimeout(zamanAsimi);
+    if (agHata){ agHata = false; rozetGuncelle(); }
     const txt = await r.text();
     try { return JSON.parse(txt); }
     catch(e){ return {ok:false, hata:"Sunucu yanıtı bozuk", http:r.status}; } // boş/500 → çevrimdışı sanma
-  }catch(e){ clearTimeout(zamanAsimi); return {ok:false, hata:"Bağlantı hatası", offline:true}; }
+  }catch(e){ clearTimeout(zamanAsimi); agHata = true; rozetGuncelle(); return {ok:false, hata:"Bağlantı hatası", offline:true}; }
 }
 
 async function girisYap(){
@@ -512,11 +627,13 @@ function ekranAc(){
   $("loginPg").style.display = "none";
   $("whoAd").textContent = OT.ad;
   $("whoRol").textContent = OT.rol;
+  $("whoAv").textContent = basHarf(OT.ad);
+  selamla();
   ciz();
   rozetGuncelle();
   // Açılışta aktif/biten bir gün varsa sunucuyla bir kez uzlaştır (çevrimdışı biten
   // mesai yeniden açıldığında da Bitrix'e/rapora ulaşsın).
-  if (S && S.durum && S.durum !== "hazir"){ dirty=true; rozetGuncelle(); planla(navigator.onLine ? 400 : 4000); }
+  if (S && S.durum && S.durum !== "hazir"){ dirty=true; rozetGuncelle(); planla(400); }
 }
 
 /* ---------- Sunucu senkronu: güvenilir kuyruk ----------
@@ -534,10 +651,9 @@ function isaretle(acil=false){ dirty=true; rozetGuncelle(); planla(acil ? 0 : 60
 
 async function syncCalis(){
   if (!OT || syncing || !dirty){ rozetGuncelle(); return; }
-  if (!navigator.onLine){ rozetGuncelle(); planla(4000); return; } // ağ yok → bekle, yeniden dene
   syncing=true; dirty=false; rozetGuncelle();
   const anlik = JSON.parse(JSON.stringify(S)); // gönderilecek durumu dondur
-  const r = await apiCall("gun_kaydet", {action:"gun_kaydet", gun: gunKey(), veri: anlik});
+  const r = await apiCall("gun_kaydet", {action:"gun_kaydet", gun: S.tarih || gunKey(), veri: anlik});
   syncing=false;
   if (r && r.ok){
     sonSyncOk = Date.now(); backoff = 1500;
@@ -545,19 +661,19 @@ async function syncCalis(){
   } else {
     dirty = true;                      // başarısız → koru ve tekrar dene
     backoff = Math.min(Math.round(backoff*1.8), 30000);
-    planla(navigator.onLine ? backoff : 4000);
+    planla(backoff);
   }
   rozetGuncelle();
 }
 
 function rozetGuncelle(){
   const rz=$("syncRozet"), tx=$("syncTxt"), not=$("syncNot"), bar=$("netBar");
-  if (bar) bar.classList.toggle("show", !navigator.onLine);
+  if (bar) bar.classList.toggle("show", agHata);
   if (!rz || !tx) return;
   let cls="ok", label="Hazır", notCls="", notTxt="";
-  if (!navigator.onLine){
+  if (agHata){
     cls="offline"; label="Çevrimdışı";
-    if (dirty){ notCls="warn"; notTxt="⚠️ İnternet yok — mesai kaydın telefonunda tutuluyor. Bağlanınca otomatik gönderilecek."; }
+    if (dirty){ notCls="warn"; notTxt="⚠️ Sunucuya ulaşılamıyor — mesai kaydın cihazında tutuluyor. Bağlantı gelince otomatik gönderilecek."; }
   } else if (syncing){
     cls="pending"; label="Kaydediliyor…";
   } else if (dirty){
@@ -574,7 +690,7 @@ function rozetGuncelle(){
 function flushBeacon(){
   if (!OT || !dirty || !navigator.sendBeacon) return;
   try{
-    const blob = new Blob([JSON.stringify({action:"gun_kaydet", gun:gunKey(), veri:S, _tok:OT.token})],
+    const blob = new Blob([JSON.stringify({action:"gun_kaydet", gun:S.tarih||gunKey(), veri:S, _tok:OT.token})],
                           {type:"application/json"});
     if (navigator.sendBeacon(`${API}?action=gun_kaydet&beacon=1`, blob)) dirty=false;
   }catch(e){}
@@ -583,7 +699,7 @@ function flushBeacon(){
 async function sunucudanYukle(){
   yerelYukle(); // önce bu kullanıcının yerel verisi
   const r = await apiCall("gun_getir&gun=" + gunKey());
-  if (r.ok && r.veri && r.veri.gun === bugun) {
+  if (r.ok && r.veri && r.veri.gun === bugunStr()) {
     S = r.veri;
     localStorage.setItem(depoAnahtar(), JSON.stringify(S));
   }
@@ -606,21 +722,23 @@ const STIL = {
 };
 
 /* ---------- Durum (kullanıcıya özel, kalıcı) ---------- */
-const bugun = new Date().toDateString();
+const bugunStr = () => new Date().toDateString();
 const gunKey = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
-const bosGun = () => ({ gun: bugun, durum: "hazir", segs: [], bas: null, tip: null });
+// tarih: kaydın ait olduğu gün (gece yarısını aşan mesai başladığı güne yazılır)
+const bosGun = () => ({ gun: bugunStr(), tarih: gunKey(), durum: "hazir", segs: [], bas: null, tip: null });
 const depoAnahtar = () => "xre-mesai:" + (OT ? OT.kadi : "misafir");
 let S = bosGun();
 function yerelYukle(){
   const v = JSON.parse(localStorage.getItem(depoAnahtar()) || "null");
-  S = (v && v.gun === bugun) ? v : bosGun();
+  S = (v && v.gun === bugunStr()) ? v : bosGun();
 }
 const kaydet = (acil=false) => { localStorage.setItem(depoAnahtar(), JSON.stringify(S)); isaretle(acil); };
 
 /* ---------- Yardımcılar ---------- */
 const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = (ms) => { const s=Math.floor(ms/1000); return [s/3600,s%3600/60,s%60].map(x=>String(Math.floor(x)).padStart(2,"0")).join(":"); };
-const fmtSaat = (ms) => { const dk=Math.floor(ms/60000),h=Math.floor(dk/60),m=dk%60; if(!h&&!m) return Math.max(0,Math.floor(ms/1000))+" sn"; return h?`${h} sa ${m} dk`:`${m} dk`; };
+const fmtSaat = (ms) => { const dk=Math.floor(ms/60000),h=Math.floor(dk/60),m=dk%60; if(!h&&!m) return Math.max(0,Math.floor(ms/1000))+" sn"; return h?(m?`${h} sa ${m} dk`:`${h} sa`):`${m} dk`; };
 const saat = (t) => new Date(t).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
 
 const toplamlar = () => {
@@ -635,64 +753,61 @@ const toplamlar = () => {
 const ohModu = () => { const h=new Date().getHours(); return h>=ROL.onBas && h<ROL.onBit; };
 const ohAktif = () => S.durum==="calisiyor" && ohModu() && !S.segs.some(s=>s.tip==="calisma");
 
-/* ---------- Konum: GPS için bekleme süresi uzatıldı, en isabetli okumayı kaydet ---------- */
-function konumAl(alan) {
-  if (!navigator.geolocation) {
-    return;
-  }
-  
-  let enIyi = null;
-  const beklemeSuresi = 15000; // 8.5 saniye yerine 15 saniye (GPS kilidi için yeterli süre)
-
-  const kaydetKonum = () => {
-    S[alan] = enIyi ? enIyi : { hata: true };
-    kaydet();
-    ciz();
+/* ---------- Konum ----------
+   Eski sürümdeki sorunlar:
+   - Yalnızca yüksek hassasiyet (GPS) isteniyordu; GPS'i olmayan bilgisayarlarda zaman
+     aşımına düşüp hiç konum alınamıyordu.
+   - Çıkışta rapor, konum gelmeden anında gönderiliyordu ("Çıkış konumu alınamadı").
+   Yeni sürüm: önce hızlı (ağ/Wi-Fi veya son 5 dk'lık önbellek) konum, paralelde hassas
+   GPS; en iyi okuma kaydedilir. Hata sebebi (izin yok / zaman aşımı) de kaydedilir.
+   Sunucu, mesai bitince raporu çıkış konumu gelene kadar ~40 sn bekletir. */
+const KONUM_SURE = 20000;
+const konumIs = {};      // alan -> şu an alınıyor mu
+const KONUM_HATA = {1:"konum izni verilmedi", 2:"konum bulunamadı", 3:"zaman aşımı"};
+function konumAl(alan){
+  if (!navigator.geolocation){ S[alan]={hata:true, neden:"tarayıcı desteklemiyor"}; kaydet(true); ciz(); return; }
+  if (konumIs[alan]) return;
+  konumIs[alan] = true; ciz();
+  let enIyi = null, bitti = false, sonHata = null, wid = null, tm = null;
+  const kapat = () => {
+    if (bitti) return; bitti = true;
+    if (wid !== null) navigator.geolocation.clearWatch(wid);
+    clearTimeout(tm); konumIs[alan] = false;
+    S[alan] = enIyi || { hata:true, neden: KONUM_HATA[sonHata] || "zaman aşımı" };
+    if (alan === "cikisKonum") delete S.konumBekliyor; // sunucu artık bitiş raporunu gönderebilir
+    kaydet(true); ciz();
   };
-
-  const wid = navigator.geolocation.watchPosition(
-    (p) => {
-      const okuma = { 
-        lat: +p.coords.latitude.toFixed(6), 
-        lng: +p.coords.longitude.toFixed(6), 
-        dogruluk: Math.round(p.coords.accuracy) 
-      };
-      
-      // İlk konumsa veya yeni konum daha iyi bir hassasiyete sahipse güncelle
-      if (!enIyi || okuma.dogruluk < enIyi.dogruluk) { 
-        enIyi = okuma; 
-        S[alan] = enIyi; 
-        kaydet(); 
-        ciz(); 
-      }
-      
-      // ±30 metre ve altı mükemmel bir hassasiyettir, bulduysan beklemeye gerek yok
-      if (okuma.dogruluk <= 30) { 
-        navigator.geolocation.clearWatch(wid); 
-        kaydetKonum(); 
-      } 
-    },
-    (hata) => { 
-      navigator.geolocation.clearWatch(wid); 
-      kaydetKonum(); 
-    },
-    { enableHighAccuracy: true, timeout: beklemeSuresi, maximumAge: 0 }
-  );
-
-  // Süre dolduğunda hala mükemmel konum bulunamadıysa o ana kadar alınan en iyi konumu kullan
-  setTimeout(() => { 
-    navigator.geolocation.clearWatch(wid); 
-    kaydetKonum(); 
-  }, beklemeSuresi);
+  const okuma = (p) => {
+    if (bitti) return;
+    const o = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), dogruluk:Math.round(p.coords.accuracy) };
+    if (!enIyi || o.dogruluk < enIyi.dogruluk){ enIyi = o; S[alan] = o; kaydet(); ciz(); }
+    if (o.dogruluk <= 30) kapat(); // yeterince hassas — beklemeye gerek yok
+  };
+  const hata = (e) => { sonHata = e.code; if (e.code === 1) kapat(); };
+  // 1) hızlı: ağ konumu veya son 5 dk içindeki önbellek (bilgisayarlar için şart)
+  navigator.geolocation.getCurrentPosition(okuma, hata, { enableHighAccuracy:false, maximumAge:300000, timeout:KONUM_SURE });
+  // 2) hassas: GPS (telefon)
+  wid = navigator.geolocation.watchPosition(okuma, hata, { enableHighAccuracy:true, maximumAge:0, timeout:KONUM_SURE });
+  tm = setTimeout(kapat, KONUM_SURE);
+}
+/* Konumu önceden "ısıt": tarayıcı son konumu önbelleğe alır, çıkışta anında kullanılır */
+function konumIsit(){
+  if (!navigator.geolocation) return;
+  try { navigator.geolocation.getCurrentPosition(()=>{}, ()=>{}, { enableHighAccuracy:true, maximumAge:120000, timeout:15000 }); } catch(e){}
 }
 
 const mapsLink = (k) => `https://maps.google.com/?q=${k.lat},${k.lng}`;
-const konumEtiket = (k, ad) => !k ? "" : k.hata
-  ? `<span style="color:var(--brick)">⚠ ${ad} konumu alınamadı</span>`
+const konumEtiket = (k, ad, alan) => konumIs[alan]
+  ? `<span style="color:var(--gold-l)">📍 ${ad} konumu alınıyor…</span>`
+  : !k ? "" : k.hata
+  ? `<span style="color:var(--brick)">⚠ ${ad} konumu alınamadı${k.neden?` (${esc(k.neden)})`:""}</span>
+     <button class="cikis" style="color:var(--gold-l);margin-left:6px" onclick="konumAl('${alan}')">Tekrar dene</button>
+     ${k.neden==="konum izni verilmedi"?`<br><span style="color:var(--faint);font-size:11.5px">Adres çubuğundaki 🔒 simgesinden konuma izin verin${/windows/i.test(navigator.userAgent)?"; Windows'ta Ayarlar › Gizlilik › Konum açık olmalı":""}.</span>`:""}`
   : `📍 <a href="${mapsLink(k)}" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:600">${ad} konumu</a> <span style="color:var(--faint)">(±${k.dogruluk} m)</span>`;
 
 /* ---------- Aksiyonlar ---------- */
-function baslat(){ S.durum="calisiyor"; S.bas=Date.now(); S.tip=null; kaydet(true); konumAl("girisKonum"); ciz(); }
+function baslat(){ S.durum="calisiyor"; S.bas=Date.now(); S.tip=null; S.tarih=S.tarih||gunKey(); kaydet(true); konumAl("girisKonum"); ciz();
+  bildir("🟢 Mesai başladı — iyi çalışmalar!"); }
 function segKapat(){
   const t=Date.now(), b=S.bas; let seg;
   if (S.tip) seg={tip:S.tip, ad:MOLA[S.tip].ad, bas:b, bit:t};
@@ -702,41 +817,127 @@ function segKapat(){
   }
   S.segs.push(seg); return t;
 }
-function molayaCik(id){ S.bas=segKapat(); S.tip=id; S.durum="molada"; kaydet(true); ciz(); }
-function devam(){ S.bas=segKapat(); S.tip=null; S.durum="calisiyor"; kaydet(true); ciz(); }
-function sonlandir(){ segKapat(); S.bas=null; S.tip=null; S.durum="bitti"; kaydet(true); konumAl("cikisKonum"); sekme("rapor"); }
-function sifirla(){ S={gun:bugun,durum:"hazir",segs:[],bas:null,tip:null}; kaydet(); sekme("mesai"); }
+function molayaCik(id){ S.bas=segKapat(); S.tip=id; S.durum="molada"; menuAcik=false; kaydet(true); ciz();
+  bildir(`${MOLA[id].emoji} ${MOLA[id].ad} başladı · ekibe bildiriliyor`); }
+function devam(){
+  const m = S.tip ? MOLA[S.tip] : null, sure = S.bas ? Date.now()-S.bas : 0;
+  S.bas=segKapat(); S.tip=null; S.durum="calisiyor"; kaydet(true); ciz();
+  if (m) bildir(`▶️ ${fmtSaat(sure)} ${m.ad.toLowerCase()}${m.sayilir?'dan':'ndan'} döndün · ekibe bildiriliyor`);
+}
+function sonlandir(){
+  konumIsit(); // onay penceresi açıkken konum hazırlansın
+  if (!confirm("Mesaiyi sonlandırmak istiyor musun?")) return;
+  segKapat(); S.bas=null; S.tip=null; S.durum="bitti"; S.bitis=Date.now();
+  if (navigator.geolocation) S.konumBekliyor=true; // rapor çıkış konumunu beklesin
+  kaydet(true); konumAl("cikisKonum"); sekme("rapor");
+  bildir("🏁 Mesai tamamlandı · çıkış konumu alınıyor, birkaç saniye bekleyin");
+}
+/* Bitmiş günü SİLMEDEN mesaiye geri dön (eski "Yeni Gün Başlat" günün kayıtlarını sıfırlıyordu) */
+function yenidenBasla(){
+  S.durum="calisiyor"; S.bas=Date.now(); S.tip=null; delete S.bitis; delete S.cikisKonum; delete S.konumBekliyor;
+  kaydet(true); sekme("mesai"); bildir("🔄 Mesaiye geri döndün");
+}
+let toastT=null;
+function bildir(m){ const t=$("toast"); if(!t) return; t.textContent=m; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"), 3200); }
 let menuAcik=false;
 function toggleMenu(){ menuAcik=!menuAcik; ciz(); }
 
+/* Sunucudaki raporMetni() ile aynı biçim (önizleme) */
 function telegramMesaj(){
   const t=toplamlar();
-  let m=`📋 ${OT ? OT.ad.split(" ")[0] : "Çalışan"} bugün ${fmtSaat(t.calisma)} çalıştı`;
-  for (const [id,v] of Object.entries(MOLA)) if(!v.sayilir && t.molalar[id]) m+=`, ${fmtSaat(t.molalar[id])} ${v.ad.toLowerCase()}na çıktı`;
+  let m=`📋 ${esc(OT ? ilkAd(OT.ad) : "Çalışan")} bugün ${fmtSaat(t.calisma)} çalıştı`;
+  for (const id of ["yemek","cay","tuvalet"]) if (t.molalar[id]) m+=`, ${fmtSaat(t.molalar[id])} ${MOLA[id].ad.toLowerCase()}na çıktı`;
   if (t.molalar.randevu) m+=`, ${fmtSaat(t.molalar.randevu)} online randevuda kaldı`;
   m+=".";
-  if (S.girisKonum && !S.girisKonum.hata) m+=`<br>📍 Giriş: <a href="${mapsLink(S.girisKonum)}" target="_blank" style="color:var(--blue)">haritada gör</a>`;
-  if (S.cikisKonum && !S.cikisKonum.hata) m+=` &nbsp;·&nbsp; Çıkış: <a href="${mapsLink(S.cikisKonum)}" target="_blank" style="color:var(--blue)">haritada gör</a>`;
+  if (S.segs.length) m+=`<br>🕘 ${saat(S.segs[0].bas)} – ${saat(S.segs[S.segs.length-1].bit)} · ${t.mola ? "toplam mola "+fmtSaat(t.mola) : "mola yok"}`;
+  const k = (ad, v, alan) => konumIs[alan] ? `📍 ${ad}: alınıyor…`
+    : v && !v.hata ? `📍 ${ad}: <a href="${mapsLink(v)}" target="_blank" style="color:var(--blue)">haritada gör</a> (±${v.dogruluk} m)`
+    : `⚠️ ${ad} konumu alınamadı${v && v.neden ? " ("+esc(v.neden)+")" : ""}`;
+  m+=`<br>${k("Giriş", S.girisKonum, "girisKonum")}<br>${k("Çıkış", S.cikisKonum, "cikisKonum")}`;
   return m;
 }
 
 /* ---------- Çizim ---------- */
 const C = 2*Math.PI*120;
+const HEDEF_MS = 8*3600000; // günlük hedef (sıralamadaki 5★ ile aynı: 8 sa)
 $("ringBar").style.strokeDasharray = C;
 
+/* Açık segment dahil (canlı) günün segmentleri */
+const canliSegler = () => {
+  const l = S.segs.slice();
+  if ((S.durum==="calisiyor"||S.durum==="molada") && S.bas){
+    const tip = S.tip || (ohAktif() ? "onhazirlik" : "calisma");
+    l.push({tip, ad: S.tip ? MOLA[S.tip].ad : (tip==="onhazirlik"?"Ön Hazırlık":"Çalışma"), bas:S.bas, bit:Date.now(), canli:true});
+  }
+  return l;
+};
+const canliToplam = () => {
+  const t = { calisma:0, mola:0, molalar:{}, adet:{} };
+  for (const s of canliSegler()){
+    const d = s.bit - s.bas; if (d<=0) continue;
+    if (s.tip==="calisma"||s.tip==="onhazirlik") t.calisma+=d;
+    else if (MOLA[s.tip]) { t.molalar[s.tip]=(t.molalar[s.tip]||0)+d; t.adet[s.tip]=(t.adet[s.tip]||0)+1; MOLA[s.tip].sayilir ? t.calisma+=d : t.mola+=d; }
+  }
+  return t;
+};
+
+function selamla(){
+  const h = new Date().getHours();
+  const s = h<6 ? "İyi geceler" : h<12 ? "Günaydın" : h<18 ? "İyi günler" : "İyi akşamlar";
+  $("helloTxt").innerHTML = `${s}, <em>${esc(ilkAd(OT ? OT.ad : ""))}</em>`;
+  $("helloTarih").textContent = new Date().toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"long"});
+}
+
+function zamanCizelgesiHTML(segler){
+  if (!segler.length) return "";
+  const bas = segler[0].bas, bit = segler[segler.length-1].bit, top = Math.max(1, bit-bas);
+  const bar = segler.map(s=>{
+    const st = STIL[s.tip] || STIL.calisma;
+    return `<span class="${s.canli?"live":""}" title="${esc(s.ad)} · ${saat(s.bas)}–${saat(s.bit)} · ${fmtSaat(s.bit-s.bas)}"
+      style="flex-grow:${Math.max(.004,(s.bit-s.bas)/top).toFixed(4)};background-color:${st.renk}"></span>`;
+  }).join("");
+  const t = canliToplam();
+  const leg = [`<span><i style="background:${STIL.calisma.renk}"></i>Çalışma <b>${fmtSaat(t.calisma - (t.molalar.randevu||0))}</b></span>`]
+    .concat(Object.entries(t.molalar).map(([id,d])=>`<span><i style="background:${MOLA[id].renk}"></i>${MOLA[id].ad} <b>${fmtSaat(d)}</b></span>`)).join("");
+  return `<div class="tl"><div class="tl-bar">${bar}</div>
+    <div class="tl-ax"><span>${saat(bas)}</span><span>${S.durum==="bitti"?saat(bit):"şimdi · "+saat(bit)}</span></div>
+    <div class="tl-leg">${leg}</div></div>`;
+}
+
+let tickSay = 0;
 function tick(){
   const aktif = S.bas ? Date.now()-S.bas : 0;
-  const t = toplamlar();
+  const t = canliToplam();
   const mt = S.tip ? MOLA[S.tip] : null;
-  const canli = t.calisma + ((S.durum==="calisiyor"||(S.durum==="molada"&&mt?.sayilir)) ? aktif : 0);
-  const renk = S.durum==="calisiyor" ? (ohAktif()?"#9C8CE8":"#3DBF7A") : S.durum==="molada" ? mt.renk : "#454F80";
-  const prog = S.durum==="hazir" ? 0 : S.durum==="bitti" ? 1 : (aktif/3600000)%1;
+  const renk = S.durum==="calisiyor" ? (ohAktif()?"#9C8CE8":"#3DBF7A") : S.durum==="molada" ? mt.renk : S.durum==="bitti" ? "#D4AF6E" : "#454F80";
+  const prog = Math.min(1, t.calisma / HEDEF_MS);
   $("clock").textContent = S.durum==="bitti" ? fmt(t.calisma) : fmt(S.durum==="hazir"?0:aktif);
   $("clock").classList.toggle("idle", S.durum==="hazir");
-  $("totalTxt").textContent = fmt(canli);
+  $("totalTxt").textContent = fmt(t.calisma);
+  $("goalTxt").textContent = "%" + Math.round(t.calisma / HEDEF_MS * 100);
   $("ringBar").style.stroke = renk;
   $("ringBar").style.strokeDashoffset = C*(1-prog);
   $("stateTxt").style.color = renk;
+  $("msCal").textContent = fmtSaat(t.calisma);
+  $("msMola").textContent = fmtSaat(t.mola);
+  const ilk = S.segs[0]?.bas || S.bas;
+  $("msGiris").textContent = ilk ? saat(ilk) : "—";
+
+  // canlı bölümler
+  const z = $("zamanCiz"); if (z && S.durum!=="hazir") z.innerHTML = zamanCizelgesiHTML(canliSegler());
+  const cd = $("canliDur"); if (cd) cd.textContent = fmtSaat(aktif);
+  if (++tickSay % 20 === 0 && $("pgRapor").style.display==="block") cizRapor();
+}
+
+function segSatir(s, i){
+  const st = STIL[s.tip] || STIL.calisma;
+  return `<div class="seg${s.canli?" live":""}" style="border-left-color:${st.renk};animation-delay:${Math.min(i*0.04,0.3)}s">
+    <span class="mi" style="background:${st.renk}1a;color:${st.renk}">${st.emoji}</span>
+    <div class="info"><b>${esc(s.ad)}${s.canli?'<span class="now">ŞU AN</span>':""}</b>${s.not?`<span class="note">${esc(s.not)}</span>`:""}
+      <small>${saat(s.bas)} – ${s.canli?"devam ediyor":saat(s.bit)}</small></div>
+    <div class="dur" style="color:${st.renk}"${s.canli?' id="canliDur"':""}>${fmtSaat(s.bit-s.bas)}</div>
+  </div>`;
 }
 
 function ciz(){
@@ -747,17 +948,23 @@ function ciz(){
   $("pulse").className = "pulse" + ((S.durum==="calisiyor"||S.durum==="molada")?" go":"");
   $("pulse").style.background = S.durum==="molada" ? MOLA[S.tip].renk : "#3DBF7A";
 
-  const kParts = [konumEtiket(S.girisKonum,"Giriş"), konumEtiket(S.cikisKonum,"Çıkış")].filter(Boolean);
+  // durum rozeti (selamlama satırı)
+  const pill = $("durumPill"), pRenk = S.durum==="calisiyor" ? "#3DBF7A" : S.durum==="molada" ? MOLA[S.tip].renk : S.durum==="bitti" ? "#D4AF6E" : "#9AA2C8";
+  pill.className = "durum-pill" + ((S.durum==="calisiyor"||S.durum==="molada") ? " canli" : "");
+  pill.style.color = pRenk; pill.style.borderColor = pRenk+"55"; pill.style.background = pRenk+"14";
+  $("durumPillTxt").textContent = S.durum==="molada" ? `${MOLA[S.tip].emoji} ${MOLA[S.tip].ad}` : st;
+
+  const kParts = [konumEtiket(S.girisKonum,"Giriş","girisKonum"), konumEtiket(S.cikisKonum,"Çıkış","cikisKonum")].filter(Boolean);
   $("konumSatir").style.display = kParts.length ? "block" : "none";
   $("konumSatir").innerHTML = kParts.join(" &nbsp;·&nbsp; ");
 
   let b="";
   if (S.durum==="hazir") b=`<button class="btn btn-start" onclick="baslat()">▶ Mesaiyi Başlat</button>`;
   if (S.durum==="calisiyor"){
-    b=`<button class="btn btn-pause${menuAcik?" open":""}" onclick="toggleMenu()">${menuAcik?"✕ Vazgeç":"⏸ Duraklat / Molaya Çık"}</button>`;
+    b=`<button class="btn btn-pause${menuAcik?" open":""}" onclick="toggleMenu()">${menuAcik?"✕ Vazgeç":"⏸ Molaya Çık"}</button>`;
     if (menuAcik){
       b+=`<div class="menu">`+Object.entries(MOLA).map(([id,m])=>
-        `<button onclick="molayaCik('${id}')">
+        `<button onclick="molayaCik('${id}')" style="--mc:${m.renk}">
           <span class="mi" style="background:${m.renk}1a;color:${m.renk}">${m.emoji}</span>
           <span class="t">${m.ad}</span>
           ${m.sayilir?`<span class="tag" style="color:${m.renk}">Mesai sayılır</span>`:""}
@@ -766,38 +973,45 @@ function ciz(){
     b+=`<button class="btn btn-stop" onclick="sonlandir()">⏹ Mesaiyi Sonlandır</button>`;
   }
   if (S.durum==="molada") b=`<button class="btn btn-resume" onclick="devam()">▶ Çalışmaya Devam Et</button>`;
-  if (S.durum==="bitti") b=`<button class="btn btn-ghost" onclick="sifirla()">Yeni Gün Başlat</button>`;
+  if (S.durum==="bitti") b=`<button class="btn btn-ghost" onclick="yenidenBasla()">↻ Mesaiye Geri Dön</button>`;
   if (S.durum!=="calisiyor") menuAcik=false;
   $("btns").innerHTML=b;
 
-  $("akisSec").style.display = S.segs.length ? "block":"none";
-  $("akis").innerHTML = S.segs.map((s,i)=>{
-    const st=STIL[s.tip];
-    return `<div class="seg" style="border-left-color:${st.renk};animation-delay:${Math.min(i*0.04,0.3)}s">
-      <span class="mi" style="background:${st.renk}1a;color:${st.renk}">${st.emoji}</span>
-      <div class="info"><b>${s.ad}</b>${s.not?`<span class="note">${s.not}</span>`:""}<small>${saat(s.bas)} – ${saat(s.bit)}</small></div>
-      <div class="dur" style="color:${st.renk}">${fmtSaat(s.bit-s.bas)}</div>
-    </div>`;
-  }).join("");
+  const segler = canliSegler();
+  $("akisSec").style.display = segler.length ? "block":"none";
+  $("zamanCiz").innerHTML = zamanCizelgesiHTML(segler);
+  // en yeni üstte: açık (canlı) segment en başta görünür
+  $("akis").innerHTML = segler.slice().reverse().map(segSatir).join("");
   tick();
   cizRapor();
 }
 
 function cizRapor(){
   const el=$("pgRapor");
-  if (!S.segs.length){ el.innerHTML=`<div class="empty">Henüz kayıt yok.<br>Mesai sekmesinden güne başlayın.</div>`; return; }
-  const t=toplamlar();
+  const segler = canliSegler();
+  if (!segler.length){ el.innerHTML=`<div class="empty">Henüz kayıt yok.<br>Mesai sekmesinden güne başlayın.</div>`; return; }
+  const t=canliToplam();
+  const ilk=segler[0].bas, son=segler[segler.length-1].bit;
+  const molaMax = Math.max(1, ...Object.values(t.molalar));
+  const canli = S.durum==="calisiyor"||S.durum==="molada";
   el.innerHTML=`
-    <div class="stats">
-      <div class="stat" style="border-top-color:#3DBF7A"><small>Toplam Çalışma</small><div style="color:#3DBF7A">${fmtSaat(t.calisma)}</div></div>
-      <div class="stat" style="border-top-color:#D4AF6E"><small>Toplam Mola</small><div style="color:#D4AF6E">${fmtSaat(t.mola)}</div></div>
+    <div class="stats three">
+      <div class="stat" style="border-top-color:#3DBF7A"><small>Net Çalışma</small><div style="color:#3DBF7A">${fmtSaat(t.calisma)}</div>
+        <div class="alt">hedefin %${Math.round(t.calisma/HEDEF_MS*100)}'i</div></div>
+      <div class="stat" style="border-top-color:#D4AF6E"><small>Toplam Mola</small><div style="color:#D4AF6E">${fmtSaat(t.mola)}</div>
+        <div class="alt">${Object.values(t.adet).reduce((a,b)=>a+b,0)} mola</div></div>
+      <div class="stat" style="border-top-color:#5B9BE6"><small>Mesai Aralığı</small><div style="color:#5B9BE6">${saat(ilk)}–${canli?"…":saat(son)}</div>
+        <div class="alt">${canli?"devam ediyor":"tamamlandı"}</div></div>
     </div>
-    ${Object.entries(t.molalar).map(([id,d])=>{const m=MOLA[id];return `
-      <div class="seg" style="border-left-color:${m.renk};margin-top:10px">
+    <h3 class="sec">Günün Dağılımı${canli?" · canlı":""}</h3>
+    ${zamanCizelgesiHTML(segler)}
+    ${Object.keys(t.molalar).length ? `<div class="brk">${Object.entries(t.molalar).map(([id,d])=>{const m=MOLA[id];return `
+      <div class="brk-row">
         <span class="mi" style="background:${m.renk}1a;color:${m.renk}">${m.emoji}</span>
-        <div class="info"><b>${m.ad}</b></div>
-        <div class="dur" style="color:${m.renk}">${fmtSaat(d)}</div>
-      </div>`}).join("")}
+        <b>${m.ad}<small>${t.adet[id]} kez${m.sayilir?" · mesai sayılır":""}</small></b>
+        <span class="v" style="color:${m.renk}">${fmtSaat(d)}</span>
+        <div class="bar"><span style="width:${(d/molaMax*100).toFixed(1)}%;background:${m.renk}"></span></div>
+      </div>`}).join("")}</div>` : ""}
     <h3 class="sec">✈ Telegram grubuna gidecek mesaj</h3>
     <div class="tg">
       <div class="bh"><span class="ba">XRE</span><span class="bn">XRE REAL ESTATE · Mesai</span></div>
@@ -947,8 +1161,7 @@ egimBagla($("tiltCard"), 6);
 egimBagla(document.querySelector(".login-card"), 5);
 
 /* ---------- Senkron dayanıklılığı ---------- */
-window.addEventListener("online",  ()=>{ rozetGuncelle(); if (dirty) planla(200); });
-window.addEventListener("offline", rozetGuncelle);
+window.addEventListener("online",  ()=>{ if (dirty) planla(200); });
 document.addEventListener("visibilitychange", ()=>{
   if (document.visibilityState === "hidden") flushBeacon();       // arka plana/kapatmaya karşı
   else { rozetGuncelle(); if (dirty) planla(200); }               // geri dönünce hemen dene
@@ -958,9 +1171,15 @@ window.addEventListener("beforeunload", flushBeacon);
 /* Kalp atışı: aktif mesaide her dakika sunucuya yeniden bildir.
    Backend bunu Bitrix ile karşılaştırıp gerekirse hizalar (kendi kendini onarma):
    kaçan bir başlat/mola en geç 1 dk içinde Bitrix'e telafi edilir. */
+let konumIsitSay = 0;
 setInterval(()=>{
   if (!OT) return;
-  if (S.durum==="calisiyor" || S.durum==="molada") isaretle();
+  // Uygulama gece boyunca açık kaldıysa: bitmiş/başlamamış günü yeni güne çevir
+  if (S.gun !== bugunStr() && (S.durum==="hazir" || S.durum==="bitti")){ S = bosGun(); ciz(); selamla(); }
+  if (S.durum==="calisiyor" || S.durum==="molada"){
+    isaretle();
+    if (document.visibilityState==="visible" && ++konumIsitSay % 5 === 0) konumIsit();
+  }
   else if (dirty) planla(0);
   // Sıralama sekmesi açıksa canlı tut
   if ($("pgSira") && $("pgSira").style.display==="block") siralamaYukle();

@@ -210,6 +210,23 @@ label{font-size:12px;color:var(--mute);font-weight:700;display:block;margin:10px
         </div>
       </div>
 
+      <!-- Günlük toplu rapor -->
+      <div class="card span2">
+        <h2>Günlük Toplu Rapor (Telegram)</h2>
+        <p class="hint" style="margin-top:0">
+          Her akşam <b id="grSaat">20:00</b>'de o gün kimin ne kadar çalışıp ne kadar mola verdiği tek mesajla gruba gider.
+          Cron kurulmasa bile 20:00'den sonraki ilk istekte otomatik gönderilir; daha garantili olması için cPanel › <b>Cron Jobs</b>'a şunu ekleyin:
+        </p>
+        <div class="link-box"><input id="grCron" readonly><button class="mini" onclick="$('grCron').select();document.execCommand('copy')">Kopyala</button></div>
+        <div class="tools" style="margin-top:14px">
+          <div class="fld"><label for="grGun">Gün</label><input type="date" id="grGun"></div>
+          <button class="mini" onclick="grOnizle()">👁 Önizle</button>
+          <button class="mini" onclick="grGonder()">✈ Şimdi Gönder</button>
+        </div>
+        <div class="msg" id="grMsg"></div>
+        <div class="log-wrap" id="grOn" style="display:none;padding:14px 16px;font-size:13.5px;line-height:1.6;white-space:pre-wrap"></div>
+      </div>
+
       <!-- Liste -->
       <div class="card span2">
         <h2>Çalışanlar</h2>
@@ -296,6 +313,7 @@ async function yenile() {
     aktifler.map(u => `<option value="${u.id}">${esc(u.ad)}${u.bitrix_etkin ? "" : " (BX yok)"}</option>`).join("");
   sel.value = kayit;
   bitrixLogYukle();
+  if (!$("grOn").innerHTML) grOnizle();
 }
 
 async function ekle() {
@@ -380,6 +398,28 @@ async function tgTest(){
   if (r.ok) { m.style.color = "var(--green)"; m.textContent = "✓ Gönderildi — gruba bak"; }
   else { m.style.color = "var(--brick)"; m.textContent = "Gönderilemedi: " + (r.sebep || r.hata || "?"); }
 }
+/* ---------- Günlük toplu rapor ---------- */
+$("grCron").value = "0 20 * * * php " + "/home/KULLANICI/public_html" + location.pathname.replace(/admin\.html.*/, "") + "api.php >/dev/null 2>&1";
+function grMsg(t, c){ const m=$("grMsg"); m.style.display="block"; m.style.color=c; m.textContent=t; }
+async function grOnizle(){
+  const g = $("grGun").value;
+  const r = await api("gunluk_rapor" + (g ? "&gun=" + g : ""));
+  if (!r.ok){ grMsg("✗ " + (r.hata || "Alınamadı"), "var(--brick)"); return; }
+  if (!$("grGun").value) $("grGun").value = r.gun;
+  if (r.saat !== false && r.saat != null) $("grSaat").textContent = String(r.saat).padStart(2,"0") + ":00";
+  const d = r.gorev ? ({tamam:"gönderildi ✓", hata:"son deneme başarısız", calisiyor:"gönderiliyor…", bekliyor:"bekliyor"}[r.gorev.durum] || r.gorev.durum) : "henüz gönderilmedi";
+  grMsg(r.gun + " · durum: " + d + (r.gorev && r.gorev.notlar ? " (" + r.gorev.notlar + ")" : ""), "var(--mute)");
+  const on = $("grOn"); on.style.display = "block";
+  // Telegram HTML: isimler sunucuda kaçışlı, yalnızca <b> etiketi var
+  on.innerHTML = r.mesajlar.length ? r.mesajlar.join("\n\n— — —\n\n") : "Bu gün için mesai kaydı yok.";
+}
+async function grGonder(){
+  const g = $("grGun").value;
+  if (!confirm((g || "Seçili gün") + " raporu Telegram grubuna gönderilsin mi?")) return;
+  const r = await api("gunluk_rapor", { gun: g || undefined, gonder: true });
+  grMsg((r.ok ? "✓ " : "✗ ") + (r.sebep || r.hata || ""), r.ok ? "var(--green)" : "var(--brick)");
+}
+
 function kopyala(){ $("linkTxt").select(); document.execCommand("copy"); }
 
 if (PIN) girisYap();

@@ -47,6 +47,17 @@ $TOKEN_OMRU = 12 * 3600;
 $RL_LIMIT   = 5;    // deneme
 $RL_PENCERE = 900;  // 15 dk
 
+/* ---- GÜNLÜK TOPLU RAPOR ----
+   Her akşam bu saatte o günün "kim ne kadar çalıştı / mola verdi" raporu
+   Telegram grubuna gider. false yazarsanız kapanır.
+   En garantili yol cPanel > Cron Jobs:  0 20 * * * php /home/KULLANICI/public_html/mesai/api.php
+   Cron yoksa da 20:00'den sonraki ilk istekte otomatik gönderilir. */
+$GUNLUK_RAPOR_SAAT = 20;
+
+/* Cron'u PHP yerine URL ile tetiklemek isterseniz uzun, rastgele bir anahtar yazın:
+   https://alanadi/mesai/api.php?action=cron&anahtar=BU_ANAHTAR   (boş = kapalı) */
+$CRON_ANAHTAR = "";
+
 /* Teşhis: geliştirirken beklenmeyen hataların mesajını API yanıtında görmek
    isterseniz açın. CANLIDA KAPALI TUTUN. */
 // define("XRE_DEBUG", true);
