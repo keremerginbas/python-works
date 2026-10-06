@@ -456,6 +456,19 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
   transition:opacity .25s,transform .25s}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* Telegram bağlama şeridi */
+.tg-bant{display:none;align-items:center;gap:14px;margin:16px 0 0;padding:13px 16px;border-radius:var(--r-md);
+  background:linear-gradient(135deg,#2AABEE22,#2AABEE0a);border:1px solid #2AABEE55;box-shadow:0 12px 30px -16px #000c;animation:rise .4s ease both}
+.tg-bant.show{display:flex}
+.tg-bant .ic{font-size:24px;flex-shrink:0}
+.tg-bant .tx{flex:1;min-width:0;font-size:13px;color:var(--mute);line-height:1.45}
+.tg-bant .tx b{color:var(--ink);display:block;font-size:14px}
+.tg-bant a.git{flex-shrink:0;text-decoration:none;font-weight:800;font-size:13px;color:#fff;padding:10px 16px;border-radius:12px;
+  background:linear-gradient(135deg,#37b6f5,#1d93d2);box-shadow:0 10px 22px -10px #2AABEEaa;white-space:nowrap}
+.tg-bant .kapat{background:none;border:0;color:var(--faint);font-size:18px;cursor:pointer;padding:0 2px}
+@media(max-width:560px){.tg-bant{flex-wrap:wrap;align-items:flex-start}.tg-bant .tx{flex:1 1 calc(100% - 80px)}
+  .tg-bant a.git{order:3;flex:1 1 100%;text-align:center}}
+
 /* Hoş geldin / akşam hatırlatma kutusu */
 .hg{position:fixed;inset:0;z-index:210;display:none;align-items:center;justify-content:center;padding:20px;
   background:#050815b3;backdrop-filter:blur(6px)}
@@ -534,6 +547,12 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
     <div class="hello">
       <div><p id="helloTarih"></p><h2 id="helloTxt">Merhaba</h2></div>
       <span class="durum-pill" id="durumPill"><i></i><span id="durumPillTxt">Mesai başlamadı</span></span>
+    </div>
+    <div class="tg-bant" id="tgBant">
+      <span class="ic">🔔</span>
+      <div class="tx"><b>Telegram hatırlatmalarını aç</b>Mesaini kapatmayı unutursan bot sana özelden haber versin. Tek dokunuş: aç → BAŞLAT.</div>
+      <a class="git" id="tgBantLink" href="#" target="_blank" rel="noopener" onclick="tgBaglandiKontrol()">✈ Telegram'ı Bağla</a>
+      <button class="kapat" title="Şimdilik gizle" onclick="tgBantGizle()">✕</button>
     </div>
     <div class="mesai-grid">
       <div class="card" id="tiltCard">
@@ -664,6 +683,7 @@ function ekranAc(){
   // mesai yeniden açıldığında da Bitrix'e/rapora ulaşsın).
   if (S && S.durum && S.durum !== "hazir"){ dirty=true; rozetGuncelle(); planla(400); }
   setTimeout(hosgeldinGoster, 500);
+  tgDurumYukle();
 }
 
 /* ---------- Sunucu senkronu: güvenilir kuyruk ----------
@@ -1153,6 +1173,27 @@ async function siralamaYukle(kutla=false){
     <div class="lb">${rowsHTML}</div>
     <p style="font-size:11px;color:var(--faint);text-align:center;margin-top:12px">⭐ Yıldızlar günlük ortalama çalışmaya göre (8 sa/gün = 5★). 🟢 = şu an mesaide.</p>`;
   if (kutla && liste.length) konfetiPatlat();
+}
+
+/* ---------- Telegram bağlama ----------
+   Kişiye özel linkle bot açılır; BAŞLAT'a basınca sunucu kişiyi eşleştirir ve bot "Bağlandın" der. */
+async function tgDurumYukle(){
+  if (!OT) return;
+  let gizli = false; try { gizli = localStorage.getItem("xre-tg-gizle:"+OT.kadi) === gunKey(); } catch(e){}
+  const r = await apiCall("tg_durum");
+  const goster = r && r.ok && r.aktif && !r.bagli && r.link && !gizli;
+  $("tgBant").classList.toggle("show", !!goster);
+  if (goster) $("tgBantLink").href = r.link;
+  return r;
+}
+function tgBantGizle(){ try { localStorage.setItem("xre-tg-gizle:"+OT.kadi, gunKey()); } catch(e){} $("tgBant").classList.remove("show"); }
+function tgBaglandiKontrol(){
+  // Kişi Telegram'da BAŞLAT'a basınca eşleşme birkaç saniye–1 dk içinde olur
+  let n = 0;
+  const t = setInterval(async ()=>{
+    const r = await tgDurumYukle();
+    if ((r && r.bagli) || ++n > 12){ clearInterval(t); if (r && r.bagli) bildir("✅ Telegram bağlandı — hatırlatmalar artık sana özelden gelecek"); }
+  }, 8000);
 }
 
 /* ---------- Hoş geldin / akşam hatırlatma kutusu ----------

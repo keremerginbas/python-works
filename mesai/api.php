@@ -25,6 +25,9 @@ $UYGULAMA_URL      = $UYGULAMA_URL ?? "https://xrex.com.tr/mesai/";
 /* Kullanıcı adı → Telegram kimliği (sayısal ID veya @kullaniciadi). kisiler.php varsa oradan gelir;
    admin panelinden kişiye özel girilen değer önceliklidir. */
 $TG_KISILER = $TG_KISILER ?? [];
+/* Kişisel mesajlar için AYRI bot (ör. @xremesaibot). Tanımlı değilse grup botu kullanılır.
+   Ayrı bot önerilir: başka sistemlerle çakışmaz, kişiler "Başlat"a basınca anında yanıt alır. */
+$TG_OZEL_TOKEN = $TG_OZEL_TOKEN ?? "";
 if (is_file(__DIR__ . "/kisiler.php")) require __DIR__ . "/kisiler.php";
 $CLI = (PHP_SAPI === "cli");
 ignore_user_abort(true); // yanıt gittikten sonraki arka plan işleri yarıda kalmasın
@@ -348,7 +351,13 @@ function zamanliIsler($db){
       $h = tgHedefBul($db, $u);
       if (!$h["chat"] && str_starts_with($h["ham"], "@")) { $bekleyen = true; break; }
     }
-    if ($bekleyen && gorevAl($db, "tg_eslestir", 600)) { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); }
+    if (ozelBotAyri()) {
+      // Webhook kuruluysa (409) saatte bir bakmak yeter; değilse dakikada bir gelen kutusunu işle
+      $s = $db->prepare("SELECT zaman, notlar FROM gorevler WHERE anahtar='tg_eslestir'"); $s->execute();
+      $g = $s->fetch(PDO::FETCH_ASSOC);
+      $aralik = ($g && str_starts_with((string)$g["notlar"], "Webhook")) ? 3600 : 55;
+      if (gorevAl($db, "tg_eslestir", $aralik)) { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); }
+    } elseif ($bekleyen && gorevAl($db, "tg_eslestir", 600)) { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); }
   } catch (Throwable $e) {}
   try { hatirlatmalar($db); } catch (Throwable $e) {}
   try {
@@ -529,10 +538,11 @@ function bitrixSenkron($db, $u, $gun, $yeniDurum, $rapor = ""){
 }
 
 /* ---------------- Telegram ---------------- */
-function telegramApi($metot, $alanlar){
+function telegramApi($metot, $alanlar, $token = null){
   global $TG_TOKEN;
-  if (empty($TG_TOKEN)) return ["ok"=>false, "sebep"=>"token ayarlanmamış"];
-  $url = "https://api.telegram.org/bot$TG_TOKEN/$metot";
+  $token = $token ?: $TG_TOKEN;
+  if (empty($token)) return ["ok"=>false, "sebep"=>"token ayarlanmamış"];
+  $url = "https://api.telegram.org/bot$token/$metot";
   if (function_exists("curl_init")) {
     $ch = curl_init($url);
     curl_setopt_array($ch, [CURLOPT_POST=>true, CURLOPT_RETURNTRANSFER=>true,
@@ -555,6 +565,28 @@ function telegramGonder($metin, $html = false){
   if ($html) $alanlar["parse_mode"] = "HTML";
   return telegramApi("sendMessage", $alanlar);
 }
+
+/* Kişisel mesaj botu (ayrı bot tanımlıysa o, değilse grup botu) */
+function ozelToken(){ global $TG_OZEL_TOKEN, $TG_TOKEN; return $TG_OZEL_TOKEN ?: $TG_TOKEN; }
+function ozelBotAyri(){ global $TG_OZEL_TOKEN, $TG_TOKEN; return $TG_OZEL_TOKEN && $TG_OZEL_TOKEN !== $TG_TOKEN; }
+function ozelApi($metot, $alanlar){ return telegramApi($metot, $alanlar, ozelToken()); }
+/* Botun kullanıcı adı (getMe, 1 gün önbellekli) */
+function ozelBotAdi($db, $tazele = false){
+  $s = $db->prepare("SELECT notlar, zaman FROM gorevler WHERE anahtar='tg_bot_adi'"); $s->execute();
+  $r = $s->fetch(PDO::FETCH_ASSOC);
+  $imza = substr(sha1(ozelToken()), 0, 8); // token değişirse önbellek geçersiz
+  if (!$tazele && $r && $r["notlar"] && str_starts_with($r["notlar"], "$imza:") && time() - (int)$r["zaman"] < 86400)
+    return substr($r["notlar"], 9);
+  $me = ozelApi("getMe", []);
+  if (!$me["ok"] || empty($me["sonuc"]["username"])) return $r && $r["notlar"] ? substr($r["notlar"], 9) : null;
+  $ad = $me["sonuc"]["username"];
+  $db->prepare("INSERT INTO gorevler(anahtar,durum,zaman,notlar) VALUES('tg_bot_adi','tamam',?,?)
+    ON CONFLICT(anahtar) DO UPDATE SET zaman=excluded.zaman, notlar=excluded.notlar")->execute([time(), "$imza:$ad"]);
+  return $ad;
+}
+/* Uygulamadaki "Telegram'ı bağla" bağlantısının kişiye özel, taklit edilemez kodu */
+function baglaKodu($uid){ return "u{$uid}_" . substr(hash_hmac("sha256", "tg-bagla:$uid", ozelToken()), 0, 12); }
+function webhookGizli(){ return substr(hash_hmac("sha256", "tg-webhook", ozelToken()), 0, 40); }
 
 /* ---------------- Kişisel Telegram (özel mesaj) ----------------
    Telegram kuralı: bot bir kişiye ancak o kişi botu bir kez BAŞLAT'tıysa yazabilir.
@@ -592,29 +624,72 @@ function tgOzel($db, $u, $metin, $tur){
   if (!$h["chat"]) { tgLog($db, $u, $tur, false, $h["sebep"]); return ["ok"=>false, "sebep"=>$h["sebep"], "kalici"=>true]; }
   $alanlar = ["chat_id"=>$h["chat"], "text"=>$metin, "disable_web_page_preview"=>1];
   if ($UYGULAMA_URL) $alanlar["reply_markup"] = json_encode(["inline_keyboard"=>[[["text"=>"📲 Mesai uygulamasını aç", "url"=>$UYGULAMA_URL]]]]);
-  $r = telegramApi("sendMessage", $alanlar);
+  $r = ozelApi("sendMessage", $alanlar);
   $sebep = $r["ok"] ? "gönderildi" : $r["sebep"];
   if (!$r["ok"] && in_array($r["kod"], [400, 403], true))
     $sebep .= " — kişi botu başlatmamış ya da engellemiş olabilir";
   tgLog($db, $u, $tur, $r["ok"], $sebep);
   return ["ok"=>$r["ok"], "sebep"=>$sebep, "kalici"=>in_array($r["kod"], [400, 403], true)];
 }
-/* Botu başlatan/yazan kişilerin kimliklerini öğren (getUpdates, onay vermeden okur).
-   Bot başka bir sistemde webhook kullanıyorsa Telegram 409 döner. */
-function tgEslestir($db){
-  $r = telegramApi("getUpdates", ["limit"=>100, "timeout"=>0]);
-  if (!$r["ok"]) return ["ok"=>false, "sebep"=>$r["sebep"] . ($r["kod"] === 409 ? " — bot webhook kullanıyor; bu kişiler için sayısal ID girin" : "")];
-  $yeni = 0;
-  foreach (($r["sonuc"] ?? []) as $up) foreach (["message","edited_message","callback_query","my_chat_member"] as $k) {
-    $f = $up[$k]["from"] ?? null; $chat = $up[$k]["chat"] ?? ($up[$k]["message"]["chat"] ?? null);
-    if (!$f || empty($f["username"]) || empty($f["id"])) continue;
-    if ($chat && ($chat["type"] ?? "") !== "private" && $k !== "callback_query") continue;
-    $s = $db->prepare("INSERT INTO tg_kisiler(kullanici,chat_id,ad,zaman) VALUES(?,?,?,?)
-      ON CONFLICT(kullanici) DO UPDATE SET chat_id=excluded.chat_id, ad=excluded.ad, zaman=excluded.zaman");
-    $s->execute([strtolower($f["username"]), (int)$f["id"], trim(($f["first_name"] ?? "") . " " . ($f["last_name"] ?? "")), time()]);
-    $yeni++;
+/* Bota gelen tek bir güncellemeyi işle: kimliği öğren, eşleştir, yanıt ver.
+   $yanitla=false: ortak (grup) botta sessizce yalnızca kimlik öğrenilir. */
+function tgGuncellemeIsle($db, $up, $yanitla = true){
+  global $UYGULAMA_URL;
+  $msg = $up["message"] ?? null;
+  if (!$msg || ($msg["chat"]["type"] ?? "") !== "private" || empty($msg["from"]["id"])) return null;
+  $f = $msg["from"]; $chatId = (int)$f["id"]; $metin = trim((string)($msg["text"] ?? ""));
+  if (!empty($f["username"]))
+    $db->prepare("INSERT INTO tg_kisiler(kullanici,chat_id,ad,zaman) VALUES(?,?,?,?)
+      ON CONFLICT(kullanici) DO UPDATE SET chat_id=excluded.chat_id, ad=excluded.ad, zaman=excluded.zaman")
+      ->execute([strtolower($f["username"]), $chatId, trim(($f["first_name"] ?? "") . " " . ($f["last_name"] ?? "")), time()]);
+
+  // Uygulamadaki düğmeden gelen "/start u12_xxxx" → kişiyi kesin eşleştir
+  $u = null; $yeniBag = false;
+  if (preg_match('/^\/start\s+(u(\d+)_[0-9a-f]{12})$/', $metin, $m) && hash_equals(baglaKodu((int)$m[2]), $m[1])) {
+    $s = $db->prepare("SELECT * FROM users WHERE id=? AND aktif=1"); $s->execute([(int)$m[2]]);
+    if ($u = $s->fetch(PDO::FETCH_ASSOC)) {
+      $db->prepare("UPDATE users SET tg_id=? WHERE id=?")->execute([(string)$chatId, $u["id"]]);
+      $u["tg_id"] = (string)$chatId; $yeniBag = true;
+      tgLog($db, $u, "bağlantı", true, "uygulamadan bağlandı");
+    }
   }
-  return ["ok"=>true, "sebep"=>count($r["sonuc"] ?? []) . " güncelleme okundu, $yeni kişi kaydı güncellendi"];
+  if (!$u) // ID / kullanıcı adı listesinden tanı
+    foreach ($db->query("SELECT * FROM users WHERE aktif=1")->fetchAll(PDO::FETCH_ASSOC) as $x)
+      if ((tgHedefBul($db, $x)["chat"] ?? 0) === $chatId) { $u = $x; break; }
+  if (!$yanitla) return $u;
+
+  $tus = $UYGULAMA_URL ? ["reply_markup"=>json_encode(["inline_keyboard"=>[[["text"=>"📲 Mesai uygulamasını aç", "url"=>$UYGULAMA_URL]]]])] : [];
+  if ($u) {
+    $ilk = explode(" ", trim($u["ad"]))[0];
+    $cevap = ($yeniBag || str_starts_with($metin, "/start"))
+      ? "✅ Bağlandın $ilk!\n\nBundan sonra mesaini kapatmayı unutursan ya da molan uzun süre açık kalırsa sana buradan hatırlatacağım ⏰\n\nKolay gelsin! 💪"
+      : "👋 Merhaba $ilk! Ben XRE Mesai hatırlatma botuyum. Mesaini uygulamadan yönetebilirsin; unutursan ben buradan dürterim 😄";
+  } else {
+    $cevap = "👋 Merhaba! Seni henüz tanıyamadım.\n\nMesai uygulamasını aç, giriş yap ve üstteki 🔔 \"Telegram'ı bağla\" düğmesine bas. Gerisini ben hallederim 🙂";
+  }
+  ozelApi("sendMessage", ["chat_id"=>$chatId, "text"=>$cevap, "disable_web_page_preview"=>1] + $tus);
+  return $u;
+}
+
+/* Bota gelenleri oku. Ayrı botta okunanlar onaylanır (offset) ve yanıtlanır;
+   ortak botta başka sistemleri bozmamak için onaysız okunur, yanıt verilmez.
+   Webhook kuruluysa Telegram 409 döner — o zaman güncellemeler zaten webhook'tan işlenir. */
+function tgEslestir($db){
+  $ayri = ozelBotAyri();
+  $alan = ["limit"=>100, "timeout"=>0, "allowed_updates"=>json_encode(["message"])];
+  if ($ayri) {
+    $s = $db->prepare("SELECT notlar FROM gorevler WHERE anahtar='tg_offset'"); $s->execute();
+    $off = (int)$s->fetchColumn(); if ($off) $alan["offset"] = $off;
+  }
+  $r = ozelApi("getUpdates", $alan);
+  if (!$r["ok"]) return ["ok"=>$r["kod"] === 409, "webhook"=>$r["kod"] === 409,
+    "sebep"=>$r["kod"] === 409 ? "Webhook kurulu — bot gelen mesajları anında işliyor ✓" : $r["sebep"]];
+  $n = 0; $son = 0;
+  foreach (($r["sonuc"] ?? []) as $up) { $son = max($son, (int)$up["update_id"]); tgGuncellemeIsle($db, $up, $ayri); $n++; }
+  if ($ayri && $son)
+    $db->prepare("INSERT INTO gorevler(anahtar,durum,zaman,notlar) VALUES('tg_offset','tamam',?,?)
+      ON CONFLICT(anahtar) DO UPDATE SET zaman=excluded.zaman, notlar=excluded.notlar")->execute([time(), (string)($son + 1)]);
+  return ["ok"=>true, "sebep"=>"$n yeni mesaj işlendi"];
 }
 /* Aynı hatırlatmayı bir kez gönder; geçici hata olursa sonraki turda yeniden dener */
 function hatirlatBirKez($db, $anahtar, $u, $metin, $tur){
@@ -739,6 +814,21 @@ case "login":
 case "ben":
   $u = auth($db);
   out(["ok"=>true, "ad"=>$u["ad"], "rol"=>$u["rol"], "kadi"=>$u["kadi"]]);
+
+case "tg_durum": // çalışan: Telegram bağlı mı + kişiye özel bağlantı linki
+  $u = auth($db);
+  if (empty($TG_TOKEN) && empty($TG_OZEL_TOKEN)) out(["ok"=>true, "aktif"=>false]);
+  $bagli = (bool)tgHedefBul($db, $u)["chat"];
+  $bot = $bagli ? null : ozelBotAdi($db);
+  out(["ok"=>true, "aktif"=>true, "bagli"=>$bagli,
+       "link"=>$bot ? "https://t.me/$bot?start=" . baglaKodu((int)$u["id"]) : null]);
+
+/* Telegram webhook: kişi botu başlattığında anında eşleştirme + yanıt.
+   Admin panelindeki "Anında yanıtı kur" düğmesi bu adresi Telegram'a kaydeder. */
+case "tg_webhook":
+  if (!hash_equals(webhookGizli(), (string)($_SERVER["HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN"] ?? ""))) { http_response_code(403); out(["ok"=>false]); }
+  try { tgGuncellemeIsle($db, $in, true); } catch (Throwable $e) {}
+  out(["ok"=>true]);
 
 case "gun_kaydet":
   $u = auth($db);
@@ -952,9 +1042,22 @@ case "tg_id_ata": // kişiye özel Telegram kimliği (sayısal ID veya @kullanic
 case "tg_eslestir": // botu başlatanların kimliklerini öğren + bot bilgisi
   adminAuth();
   $r = tgEslestir($db);
-  $me = telegramApi("getMe", []);
-  $r["bot"] = $me["ok"] ? ($me["sonuc"]["username"] ?? null) : null;
+  $r["bot"] = ozelBotAdi($db, true);
+  $r["ayri"] = ozelBotAyri();
   out($r);
+
+case "tg_webhook_kur": // ayrı botu webhook'a bağla + bot açıklamasını yaz
+  adminAuth();
+  if (!ozelBotAyri()) err("Önce config.php'ye \$TG_OZEL_TOKEN (ayrı bot) ekleyin; grup botunun webhook'una dokunulmaz.");
+  $url = (string)($in["url"] ?? "");
+  if (!preg_match('~^https://[^\s]+/api\.php$~', $url)) err("Webhook adresi https ile başlamalı ve api.php ile bitmeli");
+  $r = ozelApi("setWebhook", ["url"=>"$url?action=tg_webhook", "secret_token"=>webhookGizli(),
+                               "allowed_updates"=>json_encode(["message"]), "drop_pending_updates"=>"false"]);
+  if (!$r["ok"]) out(["ok"=>false, "sebep"=>$r["sebep"]]);
+  ozelApi("setMyShortDescription", ["short_description"=>"XRE Mesai — mesaini kapatmayı unutursan hatırlatırım ⏰"]);
+  ozelApi("setMyDescription", ["description"=>"XRE Real Estate mesai hatırlatma botu.\n\nMesaini kapatmayı unutursan ya da molan uzun süre açık kalırsa sana buradan haber veririm. Başlamak için BAŞLAT'a bas, sonra mesai uygulamasındaki \"Telegram'ı bağla\" düğmesine dokun."]);
+  gorevBitir($db, "tg_eslestir", false, "Webhook kuruldu");
+  out(["ok"=>true, "sebep"=>"Anında yanıt kuruldu ✓ (bot açıklaması da yazıldı)"]);
 
 case "tg_dm_test":
   adminAuth();

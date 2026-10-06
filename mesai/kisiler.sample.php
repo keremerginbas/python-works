@@ -12,6 +12,9 @@
    ============================================================ */
 if (!defined("XRE_API")) { http_response_code(403); exit; }
 
+/* Kişisel hatırlatmaları gönderen AYRI bot'un token'ı (BotFather). Boşsa grup botu kullanılır. */
+$TG_OZEL_TOKEN = "";
+
 $TG_KISILER = [
   // "kerem" => "@keremerginbas",
   // "ahmet" => "5238375820",

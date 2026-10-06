@@ -220,6 +220,8 @@ label{font-size:12px;color:var(--mute);font-weight:700;display:block;margin:10px
           (çay 30 dk, tuvalet 20 dk, yemek 75 dk) bot <b>özelden</b> hatırlatma gönderir.
           Telegram kuralı: bot bir kişiye ancak o kişi botu bir kez açıp <b>BAŞLAT</b>'a bastıysa yazabilir.
           Aşağıdaki linki ekiple paylaşın: <a id="tgBotLink" href="#" target="_blank" style="color:#7cc4f2;font-weight:700">bot linki yükleniyor…</a>
+          <br>En kolayı: herkes mesai uygulamasındaki <b>🔔 Telegram'ı Bağla</b> düğmesine bassın; bot kişiyi kendisi tanır ve
+          "✅ Bağlandın" diye yanıt verir (ID girmeye gerek kalmaz). <span id="tgBotTur"></span>
         </p>
         <div class="tools">
           <div class="fld">
@@ -228,6 +230,7 @@ label{font-size:12px;color:var(--mute);font-weight:700;display:block;margin:10px
           </div>
           <button class="mini" onclick="tgDmTest()">✉ Deneme Mesajı Gönder</button>
           <button class="mini" onclick="tgEslestir()">🔄 Botu Başlatanları Eşleştir</button>
+          <button class="mini" onclick="tgWebhookKur()">⚡ Anında Yanıtı Kur</button>
           <button class="mini" onclick="tgLogYukle()">↻ Kayıtları Yenile</button>
         </div>
         <div class="msg" id="tgDmMsg"></div>
@@ -444,9 +447,17 @@ async function tgEslestir(sessiz){
   const r = await api("tg_eslestir");
   if (r.bot){ const l=$("tgBotLink"); l.href = "https://t.me/" + r.bot; l.textContent = "t.me/" + r.bot; }
   else if ($("tgBotLink").textContent.includes("yükleniyor")) $("tgBotLink").textContent = "(bot bilgisi alınamadı)";
+  $("tgBotTur").innerHTML = r.ayri ? "<b style='color:var(--green)'>Ayrı hatırlatma botu etkin ✓</b>"
+    : "<b style='color:var(--brick)'>Kişisel mesajlar grup botundan gidiyor — config.php'ye $TG_OZEL_TOKEN ekleyin.</b>";
   if (sessiz) return;
   tgDmMsg((r.ok ? "✓ " : "✗ ") + (r.sebep || r.hata || ""), r.ok ? "var(--green)" : "var(--brick)");
   if (r.ok) yenile();
+}
+async function tgWebhookKur(){
+  const url = location.href.replace(/admin\.html.*/, "") + "api.php";
+  if (!confirm("Kişisel bot Telegram'a şu adresle bağlanacak:\n" + url + "\n\nBöylece BAŞLAT'a basanlar anında yanıt alır. Devam?")) return;
+  const r = await api("tg_webhook_kur", { url });
+  tgDmMsg((r.ok ? "✓ " : "✗ ") + (r.sebep || r.hata || ""), r.ok ? "var(--green)" : "var(--brick)");
 }
 async function tgDmTest(){
   const uid = $("tgUser").value;

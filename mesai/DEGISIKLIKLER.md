@@ -1,4 +1,15 @@
-# XRE Mesai — 4. Kişisel Telegram Hatırlatmaları
+# XRE Mesai — 5. Ayrı hatırlatma botu (@xremesaibot) + tek dokunuşla bağlanma
+
+- Kişisel mesajlar artık **ayrı bottan** gidiyor (`$TG_OZEL_TOKEN`, kisiler.php içinde).
+  Grup mesajları/raporlar eski bottan aynen devam eder; eski bota hiç dokunulmaz.
+- Uygulamada bağlı olmayan kişiye **🔔 Telegram'ı Bağla** şeridi çıkar. Kişiye özel, taklit
+  edilemez linkle bot açılır; **BAŞLAT**'a basınca sunucu kişiyi eşleştirir ve bot
+  "✅ Bağlandın Ozan!" diye yanıt verir. ID toplamaya gerek kalmaz.
+- Bot başka mesajlara da yanıt verir (tanıdığı kişiye selam, tanımadığına "uygulamadan bağlan").
+- **⚡ Anında Yanıtı Kur** (admin): botu webhook'a bağlar, açıklamasını yazar. Kurulmazsa
+  cron/istekler üzerinden dakikada bir gelen kutusu işlenir (yanıt ~1 dk gecikir).
+- Akşam hatırlatma saati 18:05 (dakikalı ayar desteği).
+
 
 - Bot, unutanlara **özelden** yazar:
   - **18:05'ten sonra** mesaisi hâlâ açık olana: "⏰ Ozan, mesain hâlâ açık görünüyor… Çıktıysan ⏹ Mesaiyi Sonlandır'a basmayı unutma".
