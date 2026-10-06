@@ -19,7 +19,7 @@ require __DIR__ . "/config.php"; // gizli ayarlar (token, webhook, admin hash)
 $GUNLUK_RAPOR_SAAT = $GUNLUK_RAPOR_SAAT ?? 20;  // her akşam bu saatte o günün toplu raporu (false = kapalı)
 $CRON_ANAHTAR      = $CRON_ANAHTAR ?? "";       // URL ile cron tetiklemek için gizli anahtar (boş = yalnız CLI)
 /* Kişisel Telegram hatırlatmaları (özelden, bot üzerinden) */
-$HATIRLATMA_SAAT   = $HATIRLATMA_SAAT ?? 19;    // bu saatte mesaisi hâlâ açık olanlara "kapatmayı unutma" (false = kapalı)
+$HATIRLATMA_SAAT   = $HATIRLATMA_SAAT ?? "18:05"; // bu saatte mesaisi hâlâ açık olanlara "kapatmayı unutma" ("SS:DD" ya da saat; false = kapalı)
 $MOLA_HATIRLATMA_DK = $MOLA_HATIRLATMA_DK ?? ["cay"=>30, "tuvalet"=>20, "yemek"=>75]; // bu kadar dk açık kalan molaya hatırlatma
 $UYGULAMA_URL      = $UYGULAMA_URL ?? "https://xrex.com.tr/mesai/";
 /* Kullanıcı adı → Telegram kimliği (sayısal ID veya @kullaniciadi). kisiler.php varsa oradan gelir;
@@ -628,11 +628,17 @@ function hatirlatBirKez($db, $anahtar, $u, $metin, $tur){
   else $db->prepare("DELETE FROM gorevler WHERE anahtar=?")->execute([$anahtar]);
 }
 /* Unutkanlara özelden hatırlatma:
-   - Akşam (19:00 sonrası): mesaisi hâlâ açık olanlar
+   - Akşam ($HATIRLATMA_SAAT, varsayılan 18:05 sonrası): mesaisi hâlâ açık olanlar
    - Gün içinde: belirlenen süreden uzun açık kalan mola */
 function hatirlatmalar($db){
   global $HATIRLATMA_SAAT, $MOLA_HATIRLATMA_DK;
-  $gun = date("Y-m-d"); $nowMs = (int)round(microtime(true) * 1000); $saat = (int)date("G");
+  $gun = date("Y-m-d"); $nowMs = (int)round(microtime(true) * 1000);
+  // "18:05" ya da 18 biçimini kabul et
+  $aksamVakti = false;
+  if ($HATIRLATMA_SAAT !== false) {
+    [$hs, $hd] = array_map("intval", array_pad(explode(":", (string)$HATIRLATMA_SAAT), 2, 0));
+    $aksamVakti = ((int)date("G") * 60 + (int)date("i")) >= ($hs * 60 + $hd);
+  }
   $q = $db->prepare("SELECT g.user_id, g.veri, u.id, u.kadi, u.ad, u.tg_id FROM gunler g JOIN users u ON u.id=g.user_id
                      WHERE g.gun=? AND u.aktif=1 AND (g.veri LIKE '%\"durum\":\"calisiyor\"%' OR g.veri LIKE '%\"durum\":\"molada\"%')");
   $q->execute([$gun]);
@@ -640,7 +646,7 @@ function hatirlatmalar($db){
     $v = json_decode($r["veri"], true) ?: [];
     $durum = $v["durum"] ?? ""; $bas = (int)($v["bas"] ?? 0);
     $ilk = explode(" ", trim($r["ad"]))[0];
-    if ($HATIRLATMA_SAAT !== false && $saat >= (int)$HATIRLATMA_SAAT) {
+    if ($aksamVakti) {
       $o = gunOzet($v, $nowMs);
       $m = "⏰ $ilk, mesain hâlâ açık görünüyor" . ($durum === "molada" ? " (üstelik molada 😄)" : "") . ".\n"
          . "Giriş: " . ($o["ilk"] ? saatMs($o["ilk"]) : "?") . " · şu ana kadar " . fmtSaatPHP($o["calisma"]) . " çalışma.\n\n"

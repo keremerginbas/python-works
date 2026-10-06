@@ -61,7 +61,7 @@ $CRON_ANAHTAR = "";
 /* ---- KİŞİSEL HATIRLATMALAR (bot özelden yazar) ----
    Kişi → Telegram kimliği eşleşmesi kisiler.php dosyasında (bkz. kisiler.sample.php).
    Mesaisi bu saatte hâlâ açık olana "kapatmayı unutma" (false = kapalı): */
-$HATIRLATMA_SAAT = 19;
+$HATIRLATMA_SAAT = "18:05";
 /* Bu kadar dakika açık kalan molaya hatırlatma: */
 $MOLA_HATIRLATMA_DK = ["cay"=>30, "tuvalet"=>20, "yemek"=>75];
 /* Hatırlatma mesajındaki "uygulamayı aç" düğmesinin adresi: */

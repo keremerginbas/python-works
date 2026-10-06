@@ -1,7 +1,7 @@
 # XRE Mesai — 4. Kişisel Telegram Hatırlatmaları
 
 - Bot, unutanlara **özelden** yazar:
-  - **19:00'dan sonra** mesaisi hâlâ açık olana: "⏰ Ozan, mesain hâlâ açık görünüyor… Çıktıysan ⏹ Mesaiyi Sonlandır'a basmayı unutma".
+  - **18:05'ten sonra** mesaisi hâlâ açık olana: "⏰ Ozan, mesain hâlâ açık görünüyor… Çıktıysan ⏹ Mesaiyi Sonlandır'a basmayı unutma".
   - Uzun süre açık kalan **molaya** (çay 30 dk, tuvalet 20 dk, yemek 75 dk): "☕ Ozan, çay molan 14:49'de başladı, 40 dk oldu…".
   - Mesajlarda "📲 Mesai uygulamasını aç" düğmesi var. Her hatırlatma kişi başına bir kez gider.
 - Kimlikler `kisiler.php` dosyasında (kullanıcı adı → sayısal ID veya @kullaniciadi). Admin panelinden
