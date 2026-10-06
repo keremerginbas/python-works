@@ -1,0 +1,14 @@
+{
+  "name": "XRE Mesai · Beştepe",
+  "short_name": "XRE Mesai",
+  "description": "X Real Estate Beştepe — mesai ve mola takip uygulaması",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1B2344",
+  "theme_color": "#26305C",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

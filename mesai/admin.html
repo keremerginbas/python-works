@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XRE REAL ESTATE · Yönetim</title>
+<meta name="theme-color" content="#0C1126">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@300;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg0:#0C1126; --bg1:#151C3A;
+  --card:#1A2348; --card-hi:#222D58; --line:#2B366A; --line-soft:#232D5B;
+  --ink:#EEF0FA; --mute:#9AA2C8; --faint:#646D99;
+  --gold:#D4AF6E; --gold-d:#B98F4C; --gold-l:#EBD3A2;
+  --green:#3DBF7A; --brick:#E0764E;
+  --r-lg:22px; --r-md:16px; --r-sm:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Manrope','Segoe UI',system-ui,-apple-system,sans-serif;
+  color:var(--ink);font-size:15px;line-height:1.5;min-height:100vh;min-height:100dvh;
+  background:
+    radial-gradient(1100px 520px at 82% -10%, #2B366A66, transparent 62%),
+    radial-gradient(800px 500px at -10% 110%, #D4AF6E14, transparent 55%),
+    linear-gradient(180deg,var(--bg0) 0%,var(--bg1) 100%);
+  background-attachment:fixed;
+}
+::selection{background:#D4AF6E55}
+button{font:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+
+.wrap{max-width:980px;margin:0 auto;padding:24px 18px 80px}
+
+/* ---------- Wordmark ---------- */
+.wm{font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;line-height:1;
+  color:var(--gold);letter-spacing:.06em}
+.wm-badge{width:52px;height:52px;border-radius:14px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid #D4AF6E66;background:linear-gradient(160deg,#D4AF6E1f,#D4AF6E08);
+  box-shadow:inset 0 1px 0 #EBD3A233, 0 6px 18px -8px #000c;
+  font-size:22px}
+.logo-plate{background:linear-gradient(180deg,#ffffff,#eef1fb);border-radius:14px;
+  padding:8px 14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  box-shadow:0 8px 22px -10px #000c, inset 0 0 0 1px #ffffff}
+.logo-plate img{height:38px;width:auto;display:block}
+
+/* ---------- Header ---------- */
+header{
+  padding:4px 4px 22px;display:flex;align-items:center;gap:14px;
+  border-bottom:1px solid transparent;
+  border-image:linear-gradient(90deg,transparent,#D4AF6E88 18%,#D4AF6E88 82%,transparent) 1;
+}
+header b{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;color:var(--ink);
+  font-size:clamp(18px,2.6vw,24px);letter-spacing:.12em;display:block}
+header b em{font-style:normal;color:var(--gold)}
+header .tr{font-size:10px;letter-spacing:.42em;color:var(--mute);font-weight:600;margin-top:2px}
+
+/* ---------- Kartlar ---------- */
+.card{background:linear-gradient(170deg,var(--card-hi),var(--card) 55%);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:22px;margin-top:16px;
+  box-shadow:0 22px 50px -24px #000d, inset 0 1px 0 #ffffff10}
+h2{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--mute);
+  font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4AF6E55,transparent)}
+
+/* responsive panel düzeni — JS #panel'i block yaptığı için grid içteki sarmalayıcıda */
+.panel-grid{display:grid}
+@media(min-width:880px){
+  .panel-grid{grid-template-columns:1fr 1fr;gap:0 16px;align-items:start}
+  .panel-grid .span2{grid-column:1 / -1}
+}
+
+/* ---------- Form ---------- */
+input,select{font:inherit;color:var(--ink);width:100%;padding:12px 14px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:#0F1531;outline:none;
+  transition:border .15s,box-shadow .15s;appearance:none}
+input::placeholder{color:var(--faint)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239AA2C8' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center}
+select option{background:#151C3A;color:var(--ink)}
+input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px #D4AF6E26}
+label{font-size:12px;color:var(--mute);font-weight:700;display:block;margin:10px 0 5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+@media(max-width:520px){.grid2{grid-template-columns:1fr}}
+
+/* ---------- Butonlar ---------- */
+.btn{font-weight:800;font-size:14.5px;letter-spacing:.02em;border:0;cursor:pointer;
+  padding:14px 18px;border-radius:var(--r-sm);transition:transform .12s,filter .2s}
+.btn:hover{filter:brightness(1.07)}
+.btn:active{transform:scale(.97)}
+.btn-p{color:#141B38;background:linear-gradient(135deg,var(--gold-l) -20%,var(--gold) 45%,var(--gold-d));
+  box-shadow:0 12px 26px -10px #D4AF6E88, inset 0 1px 0 #ffffff70, inset 0 -2px 0 #00000030;
+  width:100%;margin-top:16px}
+.mini{font-size:12px;font-weight:700;border:1px solid var(--line);background:#0F1531;color:var(--ink);
+  padding:8px 12px;border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap}
+.mini:hover{background:#1A2348;border-color:#3A477F}
+.mini.del{color:var(--brick);border-color:#E0764E4d}
+.mini.del:hover{background:#E0764E12}
+
+/* ---------- Çalışan listesi ---------- */
+.row{display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+.row:last-child{border:0}
+.av{width:40px;height:40px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--gold),var(--gold-d));color:#141B38;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;
+  box-shadow:inset 0 1px 0 #ffffff55, 0 4px 10px -4px #000c}
+.row .i{flex:1;min-width:140px}
+.row .i b{font-size:14px;display:block}
+.row .i small{font-size:12px;color:var(--mute)}
+.row .kadi{font-size:12px;color:var(--gold-l);background:#D4AF6E1a;border:1px solid #D4AF6E33;
+  padding:4px 10px;border-radius:99px;font-weight:700}
+
+/* ---------- Mesaj / link ---------- */
+.msg{margin-top:10px;font-size:13px;font-weight:700;display:none}
+.link-box{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.link-box input{flex:1;min-width:180px;font-variant-numeric:tabular-nums}
+.hint{font-size:12px;color:var(--mute);margin-top:10px;line-height:1.6}
+.hint b{color:var(--gold-l)}
+#panel{display:none}
+
+/* ---------- Bitrix ID rozeti ---------- */
+.bx{font-size:12px;color:var(--blue);background:#5B9BE61a;border:1px solid #5B9BE633;
+  padding:4px 10px;border-radius:99px;font-weight:700;white-space:nowrap}
+.bx.warn{color:var(--brick);background:#E0764E12;border-color:#E0764E4d}
+
+/* ---------- Senkron kayıt satırları ---------- */
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:6px}
+.tools .fld{flex:1;min-width:200px}
+.log-wrap{margin-top:14px;max-height:420px;overflow:auto;border:1px solid var(--line-soft);border-radius:var(--r-sm)}
+.log-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:9px 12px;
+  border-bottom:1px solid var(--line-soft);font-size:12.5px}
+.log-row:last-child{border:0}
+.log-row .t{color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+.log-row .lw{font-weight:700;color:var(--ink);min-width:92px}
+.log-row .mtd{color:var(--gold-l);font-weight:700;white-space:nowrap;font-size:12px}
+.log-row .trn{color:var(--mute);white-space:nowrap;font-variant-numeric:tabular-nums}
+.log-row .rs{flex:1;min-width:130px;color:var(--mute)}
+.log-row .ic{width:16px;text-align:center;font-weight:800;flex-shrink:0}
+.log-row.ok .ic{color:var(--green)}
+.log-row.no .ic{color:var(--brick)}
+.log-row.no{background:#E0764E0a}
+.log-empty{padding:22px 12px;color:var(--mute);font-size:13px;text-align:center}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo-plate"><img src="logo.png" alt="XRE · X Real Estate Beştepe"></div>
+    <div><div class="tr" style="margin-top:0">YÖNETİM PANELİ</div></div>
+  </header>
+
+  <!-- Admin girişi -->
+  <div class="card" id="girisCard" style="max-width:420px;margin-left:auto;margin-right:auto;margin-top:28px">
+    <h2>Yönetici Girişi</h2>
+    <label for="adminPin">Admin PIN</label>
+    <input type="password" id="adminPin" inputmode="numeric" placeholder="••••" onkeydown="if(event.key==='Enter')girisYap()">
+    <button class="btn btn-p" onclick="girisYap()">Giriş Yap</button>
+    <div class="msg" id="girisMsg" style="color:var(--brick)"></div>
+  </div>
+
+  <div id="panel">
+    <div class="panel-grid">
+      <!-- Çalışan ekle -->
+      <div class="card">
+        <h2>Çalışan Ekle</h2>
+        <div class="grid2">
+          <div><label for="fAd">Ad Soyad</label><input id="fAd" placeholder="Kerem Erginbaş"></div>
+          <div><label for="fKadi">Kullanıcı Adı</label><input id="fKadi" placeholder="kerem"></div>
+          <div><label for="fRol">Rol</label>
+            <select id="fRol">
+              <option>Yazılım Destek</option><option>Call Center</option><option>Projeci</option>
+              <option>İç Mimar</option><option>Sosyal Medya</option><option>Auto</option><option>Fuar Satış</option>
+              <option>Topraktan Satış</option><option>Yönetici</option> <option>Muhasebe</option><option>Asistan</option><option>VideoGrapher</option><option>Avukat</option><option>Proje Satış</option><option>Franchise</option><option>Elektrik</option><option>Sigorta</option><option>Barter</option>
+            </select>
+          </div>
+          <div><label for="fPin">PIN (en az 4 hane)</label><input id="fPin" inputmode="numeric" placeholder="1234"></div>
+          <div><label for="fBid">Bitrix ID (opsiyonel)</label><input id="fBid" inputmode="numeric" placeholder="örn. 116"></div>
+        </div>
+        <button class="btn btn-p" onclick="ekle()">＋ Çalışanı Ekle</button>
+        <div class="msg" id="ekleMsg"></div>
+      </div>
+
+      <div>
+        <!-- Paylaşım linki -->
+        <div class="card">
+          <h2>Çalışanlara Gönderilecek Link</h2>
+          <div class="link-box">
+            <input id="linkTxt" readonly>
+            <button class="mini" onclick="kopyala()">Kopyala</button>
+          </div>
+          <p class="hint">
+            Bu linki + kullanıcı adı ve PIN'i çalışana gönderin. Açıp giriş yaptıktan sonra
+            telefonda "Ana ekrana ekle", bilgisayarda adres çubuğundaki yükle simgesiyle kurulur.
+          </p>
+        </div>
+
+        <!-- Telegram -->
+        <div class="card">
+          <h2>Telegram Bağlantısı</h2>
+          <p class="hint" style="margin-top:0">
+            api.php içindeki <b>$TG_TOKEN</b> ve <b>$TG_CHAT</b> alanlarını doldurduktan sonra test edin.
+            Başarılıysa gruba test mesajı düşer; mesai sonlandıran her çalışanın raporu da otomatik gönderilir.
+          </p>
+          <button class="btn btn-p" onclick="tgTest()">✈ Test Mesajı Gönder</button>
+          <div class="msg" id="tgMsg"></div>
+        </div>
+      </div>
+
+      <!-- Liste -->
+      <div class="card span2">
+        <h2>Çalışanlar</h2>
+        <div id="liste"><p style="color:var(--mute);font-size:13px">Yükleniyor…</p></div>
+      </div>
+
+      <!-- Bitrix senkron teşhisi -->
+      <div class="card span2">
+        <h2>Bitrix Çalışma Zamanı Senkronu</h2>
+        <p class="hint" style="margin-top:0">
+          Uygulamadaki <b>başlat / mola / bitir</b> olayları Bitrix "Çalışma Zamanı"na aktarılır.
+          Bağlantıyı test edebilir, bir kişinin bugünkü durumunu Bitrix'e <b>yeniden itebilir</b> ve
+          son senkron denemelerini görebilirsiniz. Kırmızı satırlar başarısız denemelerdir; en sık sebep
+          <b>Bitrix ID eşleşmemesi</b>dir — çalışan satırındaki <b>Bitrix ID</b> düğmesinden düzeltin.
+        </p>
+        <div class="tools">
+          <div class="fld">
+            <label for="bxUser">Kişi (test / yeniden itme / filtre)</label>
+            <select id="bxUser" onchange="bitrixLogYukle()"><option value="">— Tümü —</option></select>
+          </div>
+          <button class="mini" onclick="bitrixTest()">🔌 Bağlantıyı Test Et</button>
+          <button class="mini" onclick="bitrixResync()">♻ Bugünü Yeniden İt</button>
+          <button class="mini" onclick="bitrixLogYukle()">↻ Kayıtları Yenile</button>
+        </div>
+        <div class="msg" id="bxMsg"></div>
+        <div class="log-wrap" id="bxLogWrap"><div class="log-empty">Yükleniyor…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "api.php";
+let PIN = sessionStorage.getItem("xre-admin") || "";
+let USERS = [];
+$ = (id) => document.getElementById(id);
+$("linkTxt").value = location.href.replace(/admin\.html.*/, "");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function bxMsg(t, c){ const m=$("bxMsg"); m.style.display="block"; m.style.color=c; m.textContent=t; }
+
+async function api(action, body) {
+  const r = await fetch(API + "?action=" + action, {
+    method: body ? "POST" : "GET",
+    headers: { "Content-Type": "application/json", "X-Admin": PIN },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return r.json();
+}
+
+async function girisYap() {
+  PIN = $("adminPin").value.trim();
+  const r = await api("admin_giris");
+  if (!r.ok) { $("girisMsg").style.display="block"; $("girisMsg").textContent = r.hata; return; }
+  sessionStorage.setItem("xre-admin", PIN);
+  $("girisCard").style.display = "none";
+  $("panel").style.display = "block";
+  yenile();
+}
+
+async function yenile() {
+  const r = await api("kullanici_listesi");
+  if (!r.ok) return;
+  const aktifler = r.liste.filter(u => u.aktif == 1);
+  USERS = aktifler;
+  $("liste").innerHTML = aktifler.length ? aktifler.map(u => {
+    const yok = u.bitrix_kaynak === "yok";
+    const kaynak = {db:"kişiye özel", config:"config eşleşmesi", yok:"eşleşme yok"}[u.bitrix_kaynak] || u.bitrix_kaynak;
+    const chip = `<span class="bx ${yok?'warn':''}" title="Bitrix ID kaynağı: ${kaynak}">BX ${u.bitrix_etkin ?? '—'}</span>`;
+    const adEsc = u.ad.replace(/['\\]/g, "");
+    return `<div class="row">
+      <div class="av">${u.ad.split(" ").map(k=>k[0]).join("").slice(0,2).toUpperCase()}</div>
+      <div class="i"><b>${esc(u.ad)}</b><small>${esc(u.rol)}</small></div>
+      <span class="kadi">${esc(u.kadi)}</span>
+      ${chip}
+      <button class="mini" onclick="bitrixIdDuzenle(${u.id},'${adEsc}',${u.bitrix_id ?? 'null'})">Bitrix ID</button>
+      <button class="mini" onclick="pinSifirla(${u.id},'${adEsc}')">PIN</button>
+      <button class="mini del" onclick="sil(${u.id},'${adEsc}')">Sil</button>
+    </div>`;
+  }).join("") : `<p style="color:var(--mute);font-size:13px">Henüz çalışan eklenmedi.</p>`;
+
+  // Bitrix aracının kişi listesini güncelle
+  const sel = $("bxUser"); const kayit = sel.value;
+  sel.innerHTML = `<option value="">— Tümü —</option>` +
+    aktifler.map(u => `<option value="${u.id}">${esc(u.ad)}${u.bitrix_etkin ? "" : " (BX yok)"}</option>`).join("");
+  sel.value = kayit;
+  bitrixLogYukle();
+}
+
+async function ekle() {
+  const r = await api("kullanici_ekle", {
+    ad: $("fAd").value, kadi: $("fKadi").value, rol: $("fRol").value, pin: $("fPin").value,
+    bitrix_id: $("fBid").value
+  });
+  const m = $("ekleMsg"); m.style.display = "block";
+  if (r.ok) { m.style.color = "var(--green)"; m.textContent = "✓ Eklendi"; ["fAd","fKadi","fPin","fBid"].forEach(i=>$(i).value=""); yenile(); }
+  else { m.style.color = "var(--brick)"; m.textContent = r.hata; }
+  setTimeout(()=>m.style.display="none", 3000);
+}
+
+/* ---------- Bitrix teşhis ---------- */
+async function bitrixIdDuzenle(id, ad, mevcut){
+  const p = prompt(ad + " için Bitrix kullanıcı ID'si\n(boş bırakıp Tamam'a basarsanız temizlenir; sistem config eşleşmesine döner):", mevcut ?? "");
+  if (p === null) return;
+  const v = String(p).trim();
+  if (v !== "" && !/^\d+$/.test(v)) { alert("Bitrix ID yalnızca rakamlardan oluşmalı."); return; }
+  const r = await api("bitrix_id_ata", { id, bitrix_id: v });
+  if (r.ok) yenile(); else alert(r.hata || "Kaydedilemedi");
+}
+
+async function bitrixTest(){
+  const uid = $("bxUser").value;
+  bxMsg("Test ediliyor…", "var(--mute)");
+  const r = await api("bitrix_test" + (uid ? ("&user_id=" + uid) : ""));
+  if (r.ok) bxMsg("✓ " + (r.sebep || "Bağlantı OK") + (r.durum ? (" · Bitrix durumu: " + r.durum) : ""), "var(--green)");
+  else bxMsg("✗ " + (r.sebep || r.hata || "Bağlantı yok") + (r.http ? (" (HTTP " + r.http + ")") : ""), "var(--brick)");
+}
+
+async function bitrixResync(){
+  const uid = $("bxUser").value;
+  if (!uid){ bxMsg("Önce yukarıdan bir kişi seçin.", "var(--brick)"); return; }
+  const ad = (USERS.find(u => u.id == uid) || {}).ad || "Seçili kişi";
+  if (!confirm(ad + " için bugünkü mesai durumu Bitrix'e yeniden itilsin mi?")) return;
+  bxMsg("Gönderiliyor…", "var(--mute)");
+  const r = await api("bitrix_resync", { id: Number(uid) });
+  if (r.ok) bxMsg("✓ " + ad + ": " + (r.sebep || ("Bitrix'e itildi" + (r.durum ? (" (" + r.durum + ")") : ""))), "var(--green)");
+  else bxMsg("✗ " + ((r.sonuc && r.sonuc.sebep) || r.sebep || r.hata || "Başarısız"), "var(--brick)");
+  bitrixLogYukle();
+}
+
+function logSatir(l){
+  const ok = l.ok == 1;
+  const t = new Date(l.zaman * 1000).toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  const gecis = (l.eski || "?") + " → " + (l.yeni || "?");
+  const http = l.http ? (" · HTTP " + l.http) : "";
+  return `<div class="log-row ${ok ? 'ok' : 'no'}">
+    <span class="ic">${ok ? '✓' : '✗'}</span>
+    <span class="t">${t}</span>
+    <span class="lw">${esc(l.kadi || '—')}</span>
+    <span class="mtd">${esc(l.metot || '')}</span>
+    <span class="trn">${esc(gecis)}</span>
+    <span class="rs">${esc(l.sebep || '')}${http}</span>
+  </div>`;
+}
+
+async function bitrixLogYukle(){
+  const uid = $("bxUser").value;
+  const r = await api("bitrix_log&limit=200" + (uid ? ("&user_id=" + uid) : ""));
+  const w = $("bxLogWrap");
+  if (!r.ok){ w.innerHTML = `<div class="log-empty">Kayıtlar alınamadı.</div>`; return; }
+  w.innerHTML = (r.log && r.log.length)
+    ? r.log.map(logSatir).join("")
+    : `<div class="log-empty">Henüz senkron kaydı yok. Bir çalışan mesai başlattığında burada görünür.</div>`;
+}
+
+async function sil(id, ad) {
+  if (!confirm(ad + " silinsin mi? (Giriş yapamaz, geçmiş kayıtları durur)")) return;
+  await api("kullanici_sil", { id }); yenile();
+}
+async function pinSifirla(id, ad) {
+  const p = prompt(ad + " için yeni PIN (en az 4 hane):");
+  if (!p) return;
+  const r = await api("pin_sifirla", { id, pin: p });
+  alert(r.ok ? "PIN güncellendi" : r.hata);
+}
+async function tgTest(){
+  const r = await api("telegram_test");
+  const m = $("tgMsg"); m.style.display = "block";
+  if (r.ok) { m.style.color = "var(--green)"; m.textContent = "✓ Gönderildi — gruba bak"; }
+  else { m.style.color = "var(--brick)"; m.textContent = "Gönderilemedi: " + (r.sebep || r.hata || "?"); }
+}
+function kopyala(){ $("linkTxt").select(); document.execCommand("copy"); }
+
+if (PIN) girisYap();
+</script>
+</body>
+</html>

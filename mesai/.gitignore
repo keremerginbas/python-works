@@ -1,0 +1,5 @@
+config.php
+data/
+*.db
+*.db-wal
+*.db-shm
