@@ -1274,7 +1274,20 @@ function pwaRehberGoster(){
   $("pwaGuide").classList.add("show");
 }
 setTimeout(pwaRehberGoster, 1200);
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+/* Service worker + otomatik güncelleme: yeni sürüm yüklenince açık sayfa kendini bir kez yeniler */
+if ("serviceWorker" in navigator) {
+  const vardi = !!navigator.serviceWorker.controller;
+  let yenilendi = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!vardi || yenilendi) return; // ilk kurulumda yenileme yok
+    yenilendi = true; flushBeacon(); location.reload();
+  });
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+    const kontrol = () => reg.update().catch(()=>{});
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") kontrol(); });
+    setInterval(kontrol, 30 * 60000);
+  }).catch(()=>{});
+}
 
 setInterval(tick,1000);
 

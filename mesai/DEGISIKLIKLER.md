@@ -1,3 +1,16 @@
+# XRE Mesai — 5.2 Güncellemeler herkese ulaşsın + "bağlı" düzeltmesi
+
+- **Site yenilenmiyordu:** Service worker sayfayı "önce önbellek" ile açıyordu; yeni sürüm ancak
+  ikinci açılışta görünüyordu. Artık sayfa **önce ağdan** gelir (çevrimdışıyken önbellek), yeni sürüm
+  yüklenince açık sayfa kendini bir kez yeniler, 30 dk'da bir ve uygulamaya dönülünce güncelleme
+  kontrol edilir. `.htaccess`: html/js/json için `Cache-Control: no-cache`. (`sw.js` v19)
+  ⚠️ Bu geçiş için herkesin uygulamayı **bir kez kapatıp yeniden açması** gerekir (eski sürümün kısıtı);
+  sonraki güncellemeler kendiliğinden gelir.
+- **Bağlama şeridi çoğu kişiye çıkmıyordu:** `kisiler.php`'de ID'si olan herkes "bağlı" sayılıyordu,
+  botu hiç başlatmamış olsa bile (bot onlara yazamaz). Artık "bağlı" = hatırlatma botunu gerçekten
+  başlatmış. Doğrulama: bota yazması, başarılı mesaj ya da sessiz `getChat` kontrolü (kişiye bildirim gitmez).
+- Admin listesinde TG ✓ yalnızca botu başlatanlarda; teşhiste "Henüz bağlanmayanlar" listesi.
+
 # XRE Mesai — 5.1 Bot yanıt vermiyordu: düzeltmeler + teşhis
 
 - **PHP 7.4 uyumluluğu:** PHP 8'e özgü `str_starts_with` / `str_contains` ve mbstring fonksiyonları

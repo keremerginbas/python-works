@@ -108,9 +108,18 @@ $db->exec("CREATE TABLE IF NOT EXISTS gorevler(
 $db->exec("CREATE TABLE IF NOT EXISTS tg_kisiler(
   kullanici TEXT PRIMARY KEY, chat_id INTEGER NOT NULL, ad TEXT, zaman INTEGER)");
 /* Kişisel hatırlatma denemeleri (admin panelinden görülür) */
+/* Hatırlatma botunu GERÇEKTEN başlatmış sohbetler. Telegram ID'si bilinse bile kişi botu
+   başlatmadıysa bot ona yazamaz; "bağlı" sayılmak için burada olmak gerekir. */
+$db->exec("CREATE TABLE IF NOT EXISTS tg_baslatan(chat_id INTEGER PRIMARY KEY, zaman INTEGER, kaynak TEXT)");
 $db->exec("CREATE TABLE IF NOT EXISTS tg_log(
   id INTEGER PRIMARY KEY AUTOINCREMENT, zaman INTEGER, user_id INTEGER, ad TEXT,
   tur TEXT, ok INTEGER, sebep TEXT)");
+
+try {
+  $db->exec("INSERT OR IGNORE INTO tg_baslatan(chat_id,zaman,kaynak)
+    SELECT CAST(u.tg_id AS INTEGER), strftime('%s','now'), 'eski-bağlantı' FROM users u
+    WHERE u.tg_id GLOB '[0-9]*' AND u.id IN (SELECT user_id FROM tg_log WHERE tur='bağlantı' AND ok=1)");
+} catch (Throwable $e) {}
 
 /* ---- brute-force koruması ---- */
 function rlAnahtar($ek){ return sha1(($_SERVER["REMOTE_ADDR"] ?? "?") . "|" . $ek); }
@@ -624,6 +633,30 @@ function tgLog($db, $u, $tur, $ok, $sebep){
     $db->exec("DELETE FROM tg_log WHERE id NOT IN (SELECT id FROM tg_log ORDER BY id DESC LIMIT 2000)");
   } catch (Throwable $e) {}
 }
+function tgBaslatti($db, $chat, $kaynak){
+  if ($chat > 0) $db->prepare("INSERT OR REPLACE INTO tg_baslatan(chat_id,zaman,kaynak) VALUES(?,?,?)")->execute([(int)$chat, time(), $kaynak]);
+}
+/* Kişi botu başlatmış mı? Kayıt yoksa Telegram'a sessizce sorar (getChat yalnızca botla
+   konuşmuş kişilerde başarılı olur; kişiye bildirim gitmez). Aynı kişi için 2 dk'da bir sorar. */
+function tgDogrula($db, $chat){
+  if (!$chat || $chat < 0) return false;
+  $s = $db->prepare("SELECT 1 FROM tg_baslatan WHERE chat_id=?"); $s->execute([(int)$chat]);
+  if ($s->fetchColumn()) return true;
+  if (!gorevAl($db, "tgdog:$chat", 120)) return false;
+  $r = ozelApi("getChat", ["chat_id"=>(int)$chat]);
+  gorevBitir($db, "tgdog:$chat", false, $r["ok"] ? "başlatmış" : $r["sebep"]);
+  if ($r["ok"] && ($r["sonuc"]["type"] ?? "") === "private") { tgBaslatti($db, $chat, "getChat"); return true; }
+  return false;
+}
+/* Kişi botla bağlı mı (kimlik biliniyor VE botu başlatmış) */
+function tgBagliMi($db, $u, $sor = true){
+  $h = tgHedefBul($db, $u);
+  if (!$h["chat"]) return false;
+  if ($sor) return tgDogrula($db, $h["chat"]);
+  $s = $db->prepare("SELECT 1 FROM tg_baslatan WHERE chat_id=?"); $s->execute([$h["chat"]]);
+  return (bool)$s->fetchColumn();
+}
+
 /* Kişiye özel mesaj. Dönüş: ok, sebep, kalici (tekrar denemenin anlamı yok mu) */
 function tgOzel($db, $u, $metin, $tur){
   global $UYGULAMA_URL;
@@ -633,8 +666,11 @@ function tgOzel($db, $u, $metin, $tur){
   if ($UYGULAMA_URL) $alanlar["reply_markup"] = json_encode(["inline_keyboard"=>[[["text"=>"📲 Mesai uygulamasını aç", "url"=>$UYGULAMA_URL]]]]);
   $r = ozelApi("sendMessage", $alanlar);
   $sebep = $r["ok"] ? "gönderildi" : $r["sebep"];
-  if (!$r["ok"] && in_array($r["kod"], [400, 403], true))
+  if ($r["ok"]) tgBaslatti($db, $h["chat"], "mesaj");
+  if (!$r["ok"] && in_array($r["kod"], [400, 403], true)) {
     $sebep .= " — kişi botu başlatmamış ya da engellemiş olabilir";
+    $db->prepare("DELETE FROM tg_baslatan WHERE chat_id=?")->execute([$h["chat"]]);
+  }
   tgLog($db, $u, $tur, $r["ok"], $sebep);
   return ["ok"=>$r["ok"], "sebep"=>$sebep, "kalici"=>in_array($r["kod"], [400, 403], true)];
 }
@@ -645,6 +681,7 @@ function tgGuncellemeIsle($db, $up, $yanitla = true){
   $msg = $up["message"] ?? null;
   if (!$msg || ($msg["chat"]["type"] ?? "") !== "private" || empty($msg["from"]["id"])) return null;
   $f = $msg["from"]; $chatId = (int)$f["id"]; $metin = trim((string)($msg["text"] ?? ""));
+  if ($yanitla) tgBaslatti($db, $chatId, "start"); // yalnızca ayrı botta: kişi bu bota yazdı
   if (!empty($f["username"]))
     $db->prepare("INSERT INTO tg_kisiler(kullanici,chat_id,ad,zaman) VALUES(?,?,?,?)
       ON CONFLICT(kullanici) DO UPDATE SET chat_id=excluded.chat_id, ad=excluded.ad, zaman=excluded.zaman")
@@ -711,8 +748,8 @@ function tgEslestir($db){
 }
 /* Aynı hatırlatmayı bir kez gönder; geçici hata olursa sonraki turda yeniden dener */
 function hatirlatBirKez($db, $anahtar, $u, $metin, $tur){
-  // Kimliği henüz çözülemeyen (botu başlatmamış) kişiyi atla; başlattığında sonraki turda gider
-  if (!tgHedefBul($db, $u)["chat"]) return;
+  // Kimliği bilinmeyen ya da botu henüz başlatmamış kişiyi atla; başlattığında sonraki turda gider
+  if (!tgBagliMi($db, $u)) return;
   $s = $db->prepare("INSERT OR IGNORE INTO gorevler(anahtar,durum,zaman) VALUES(?,'tamam',?)");
   $s->execute([$anahtar, time()]);
   if ($s->rowCount() !== 1) return;
@@ -836,10 +873,10 @@ case "ben":
 case "tg_durum": // çalışan: Telegram bağlı mı + kişiye özel bağlantı linki
   $u = auth($db);
   if (empty($TG_TOKEN) && empty($TG_OZEL_TOKEN)) out(["ok"=>true, "aktif"=>false]);
-  $bagli = (bool)tgHedefBul($db, $u)["chat"];
+  $bagli = tgBagliMi($db, $u);
   if (!$bagli && ozelBotAyri() && !empty($_GET["bekle"]) && gorevAl($db, "tg_eslestir", 6)) {
     try { $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]); } catch (Throwable $e) { gorevBitir($db, "tg_eslestir", false, "hata: " . $e->getMessage()); }
-    $bagli = (bool)tgHedefBul($db, $u)["chat"];
+    $bagli = tgBagliMi($db, $u, false);
   }
   $bot = $bagli ? null : ozelBotAdi($db);
   out(["ok"=>true, "aktif"=>true, "bagli"=>$bagli,
@@ -1037,7 +1074,9 @@ case "kullanici_listesi":
     $r["bitrix_etkin"] = $etkin ?: null;
     $r["bitrix_kaynak"] = !empty($r["bitrix_id"]) ? "db" : ($etkin ? "config" : "yok");
     $h = tgHedefBul($db, $r);
-    $r["tg_ham"] = $h["ham"]; $r["tg_hazir"] = (bool)$h["chat"]; $r["tg_sebep"] = $h["sebep"]; $r["tg_kaynak"] = $h["kaynak"];
+    $basladi = $h["chat"] && tgBagliMi($db, $r, false);
+    $r["tg_ham"] = $h["ham"]; $r["tg_hazir"] = $basladi; $r["tg_kaynak"] = $h["kaynak"];
+    $r["tg_sebep"] = $h["chat"] && !$basladi ? "kimlik biliniyor ama hatırlatma botunu henüz BAŞLAT'mamış" : $h["sebep"];
   }
   unset($r);
   out(["ok"=>true, "liste"=>$rows]);
@@ -1098,8 +1137,13 @@ case "tg_teshis": // bot neden yanıt vermiyor? — adım adım kontrol
   $r = tgEslestir($db); gorevBitir($db, "tg_eslestir", false, $r["sebep"]);
   $k[] = ["Gelen kutusu şimdi işlendi", $r["ok"], $r["sebep"]];
   $bagli = 0; $toplam = 0;
-  foreach ($db->query("SELECT * FROM users WHERE aktif=1")->fetchAll(PDO::FETCH_ASSOC) as $x) { $toplam++; if (tgHedefBul($db, $x)["chat"]) $bagli++; }
-  $k[] = ["Bağlı çalışan", $bagli > 0, "$bagli / $toplam"];
+  $baslatmayan = [];
+  foreach ($db->query("SELECT * FROM users WHERE aktif=1 ORDER BY ad")->fetchAll(PDO::FETCH_ASSOC) as $x) {
+    $toplam++;
+    if (tgBagliMi($db, $x)) $bagli++; else $baslatmayan[] = explode(" ", trim($x["ad"]))[0];
+  }
+  $k[] = ["Bağlı çalışan (botu başlatmış)", $bagli > 0, "$bagli / $toplam"];
+  if ($baslatmayan) $k[] = ["Henüz bağlanmayanlar", false, implode(", ", $baslatmayan)];
   out(["ok"=>true, "kontroller"=>array_map(fn($x) => ["ad"=>$x[0], "ok"=>(bool)$x[1], "detay"=>$x[2]], $k)]);
 
 case "tg_dm_test":
