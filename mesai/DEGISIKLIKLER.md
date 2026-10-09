@@ -1,3 +1,14 @@
+# XRE Mesai — 5.5 Giriş ekranında arka plan videosu
+
+- Giriş ekranının arka planında sessiz, döngülü video. Kartın okunabilmesi için üstünde
+  hafif lacivert katman var; kart yarı saydam ve bulanık cam görünümünde.
+- Dosyalar: `giris-video.webm` (330 KB — Chrome/Android/Firefox), `giris-video.mp4`
+  (840 KB — Safari/iPhone), `giris-poster.jpg` (video yüklenene kadar ilk kare).
+  Orijinal 5,6 MB videodan sesi çıkarılıp sıkıştırıldı.
+- Video yalnızca giriş ekranı açıkken yüklenir ve oynar; giriş yapınca durdurulup bellekten
+  çıkarılır. Veri tasarrufu ya da "hareketi azalt" açık telefonlarda yalnızca ilk kare gösterilir.
+- `sw.js` v22 (video service worker önbelleğine alınmaz).
+
 # XRE Mesai — 5.4 Yeni logo
 
 - Logo "X Real Estate Türkiye" (şeffaf arka plan) ile değiştirildi: `logo-v2.png`

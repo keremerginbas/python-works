@@ -1,4 +1,4 @@
-const CACHE = "xre-mesai-v21";
+const CACHE = "xre-mesai-v22";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./logo-v2.png", "./icon-192-v2.png", "./icon-512-v2.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,6 +16,8 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   // API çağrıları ve tüm POST istekleri: cache'e ASLA girme, doğrudan ağa git.
+  // Video: service worker'a hiç girmesin (parça parça/Range isteklerini tarayıcı kendisi yönetsin)
+  if (/\.(mp4|webm)(\?|$)/.test(req.url)) return;
   if (req.method !== "GET" || req.url.includes("api.php")) {
     e.respondWith(fetch(req));
     return;

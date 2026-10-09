@@ -228,7 +228,17 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
   background:
     radial-gradient(1000px 560px at 82% -10%,#2B366A80,transparent 60%),
     radial-gradient(700px 460px at -8% 105%,#D4AF6E1e,transparent 55%),
-    linear-gradient(165deg,#080C1D,#12193A 60%,#1A2348)}
+    linear-gradient(165deg,#080C1D,#12193A 60%,#1A2348);overflow:hidden}
+/* Giriş arka plan videosu + okunabilirlik için lacivert örtü */
+.lg-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;
+  opacity:0;transition:opacity 1.2s ease}
+.lg-video.hazir{opacity:1}
+.lg-ortu{position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(1000px 600px at 50% 45%,#0C112600 30%,#0C112680 85%),
+    linear-gradient(180deg,#080C1D59,#1A234826 45%,#080C1D80)}
+#loginPg .login-card{position:relative;z-index:1;backdrop-filter:blur(6px);
+  background:linear-gradient(170deg,#222D58e6,#1A2348eb)}
 .login-card{background:linear-gradient(170deg,var(--card-hi),var(--card));border:1px solid var(--line);
   border-radius:24px;padding:36px 28px;width:100%;max-width:392px;
   box-shadow:0 40px 90px -28px #000, inset 0 1px 0 #ffffff14;animation:rise .4s ease both}
@@ -502,6 +512,8 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 <body>
 <div id="netBar" class="net-bar">⚠️ Sunucuya ulaşılamıyor — kayıtların cihazında güvende, bağlantı gelince otomatik gönderilecek</div>
 <div id="loginPg" style="display:none">
+  <video id="lgVideo" class="lg-video" muted loop playsinline preload="none" poster="giris-poster.jpg" aria-hidden="true"></video>
+  <div class="lg-ortu"></div>
   <div class="login-card">
     <div class="lg">
       <div class="logo-plate lg-logo"><img src="logo-v2.png" alt="XRE · X Real Estate Türkiye"></div>
@@ -648,6 +660,26 @@ async function apiCall(action, body){
   }catch(e){ clearTimeout(zamanAsimi); agHata = true; rozetGuncelle(); return {ok:false, hata:"Bağlantı hatası", offline:true}; }
 }
 
+/* Giriş ekranı arka plan videosu: yalnızca giriş ekranı açıkken yüklenir/oynar.
+   Hareket azaltma ya da veri tasarrufu açıksa yalnızca ilk kare (poster) gösterilir. */
+function girisVideo(ac){
+  const v = $("lgVideo"); if (!v) return;
+  if (!ac){ try { v.pause(); v.removeAttribute("src"); v.load(); } catch(e){} return; }
+  const tasarruf = (navigator.connection && navigator.connection.saveData) ||
+    window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+  v.classList.add("hazir");
+  if (tasarruf) return;
+  if (!v.getAttribute("src")) {
+    // Chrome/Android/Firefox: daha küçük WebM (330 KB). Safari/iPhone: MP4 (840 KB, en uyumlu).
+    const safari = /^((?!chrome|chromium|crios|fxios|android).)*safari/i.test(navigator.userAgent);
+    const webm = !safari && v.canPlayType('video/webm; codecs="vp9"') === "probably";
+    v.src = webm ? "giris-video.webm" : "giris-video.mp4";
+  }
+  v.muted = true;
+  const p = v.play(); if (p && p.catch) p.catch(()=>{}); // otomatik oynatma engellenirse poster kalır
+}
+function girisGoster(){ $("loginPg").style.display = "flex"; girisVideo(true); }
+
 async function girisYap(){
   const kadi = $("lgKadi").value.trim(), pin = $("lgPin").value.trim();
   const btn = $("lgBtn"), card = document.querySelector(".login-card");
@@ -673,6 +705,7 @@ function cikisYap(){
 }
 function ekranAc(){
   $("loginPg").style.display = "none";
+  girisVideo(false);
   $("whoAd").textContent = OT.ad;
   $("whoRol").textContent = OT.rol;
   $("whoAv").textContent = basHarf(OT.ad);
@@ -1327,11 +1360,11 @@ setInterval(()=>{
 
 /* ---------- Açılış: oturum kontrolü ---------- */
 (async ()=>{
-  if (!OT){ $("loginPg").style.display="flex"; return; }
+  if (!OT){ girisGoster(); return; }
   const r = await apiCall("ben");
   if (r.ok){ OT.ad=r.ad; OT.rol=r.rol; localStorage.setItem("xre-oturum",JSON.stringify(OT)); await sunucudanYukle(); ekranAc(); }
   else if (r.offline){ yerelYukle(); ekranAc(); } // internet yoksa bu kullanıcının yereliyle devam
-  else { localStorage.removeItem("xre-oturum"); OT=null; $("loginPg").style.display="flex"; }
+  else { localStorage.removeItem("xre-oturum"); OT=null; girisGoster(); }
   if (S.durum==="bitti") sekme("rapor");
 })();
 </script>
