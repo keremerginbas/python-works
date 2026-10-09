@@ -27,7 +27,9 @@ $GUNLUK_RAPOR_SAAT = $GUNLUK_RAPOR_SAAT ?? 20;  // her akşam bu saatte o günü
 $CRON_ANAHTAR      = $CRON_ANAHTAR ?? "";       // URL ile cron tetiklemek için gizli anahtar (boş = yalnız CLI)
 /* Kişisel Telegram hatırlatmaları (özelden, bot üzerinden) */
 $HATIRLATMA_SAAT   = $HATIRLATMA_SAAT ?? "18:05"; // bu saatte mesaisi hâlâ açık olanlara "kapatmayı unutma" ("SS:DD" ya da saat; false = kapalı)
-$MOLA_HATIRLATMA_DK = $MOLA_HATIRLATMA_DK ?? ["cay"=>30, "tuvalet"=>20, "yemek"=>75]; // bu kadar dk açık kalan molaya hatırlatma
+$MOLA_HATIRLATMA_DK = $MOLA_HATIRLATMA_DK ?? ["ihtiyac"=>30, "yemek"=>75]; // bu kadar dk açık kalan molaya hatırlatma
+// Eski ayarlarda yalnız "cay" yazıyorsa ihtiyaç molası onu kullansın
+if (!isset($MOLA_HATIRLATMA_DK["ihtiyac"])) $MOLA_HATIRLATMA_DK["ihtiyac"] = $MOLA_HATIRLATMA_DK["cay"] ?? 30;
 $UYGULAMA_URL      = $UYGULAMA_URL ?? "https://xrex.com.tr/mesai/";
 /* Kullanıcı adı → Telegram kimliği (sayısal ID veya @kullaniciadi). kisiler.php varsa oradan gelir;
    admin panelinden kişiye özel girilen değer önceliklidir. */
@@ -150,17 +152,22 @@ function fmtSaatPHP($ms){
   return $h ? ($m ? "$h sa $m dk" : "$h sa") : "$m dk";
 }
 /* Mola tipleri — index.html'deki MOLA ile aynı anahtarlar.
-   sayilir=true olanlar (online randevu) çalışma süresine eklenir. */
+   sayilir=true olanlar (online randevu) çalışma süresine eklenir.
+   Çay ve tuvalet molası kaldırıldı, yerine tek "İhtiyaç molası" geldi. Eski kayıtlardaki
+   cay/tuvalet segmentleri "esdeger" ile ihtiyaç molası olarak sayılır ve gösterilir. */
+const MOLA_IHTIYAC = ["ad"=>"İhtiyaç", "emoji"=>"☕", "sayilir"=>false,
+  "cikis"=>"ihtiyaç molasına çıktı", "donus"=>"ihtiyaç molasından döndü", "ozet"=>"ihtiyaç molası verdi"];
 const MOLA_TIPLERI = [
-  "cay"     => ["ad"=>"Çay",            "emoji"=>"☕", "sayilir"=>false,
-                "cikis"=>"çay molasına çıktı",       "donus"=>"çay molasından döndü",     "ozet"=>"çay molası verdi"],
+  "ihtiyac" => MOLA_IHTIYAC,
   "yemek"   => ["ad"=>"Yemek",          "emoji"=>"🍽", "sayilir"=>false,
                 "cikis"=>"yemek molasına çıktı",     "donus"=>"yemek molasından döndü",   "ozet"=>"yemek molası verdi"],
-  "tuvalet" => ["ad"=>"Tuvalet",        "emoji"=>"🚻", "sayilir"=>false,
-                "cikis"=>"tuvalet molasına çıktı",   "donus"=>"tuvalet molasından döndü", "ozet"=>"tuvalet molası verdi"],
   "randevu" => ["ad"=>"Online randevu", "emoji"=>"🎥", "sayilir"=>true,
                 "cikis"=>"online randevuya başladı", "donus"=>"online randevuyu bitirdi", "ozet"=>"online randevu yaptı"],
+  // eski tipler (geçmiş kayıtlar ve güncelleme anında molada olanlar için)
+  "cay"     => MOLA_IHTIYAC + ["esdeger"=>"ihtiyac"],
+  "tuvalet" => MOLA_IHTIYAC + ["esdeger"=>"ihtiyac"],
 ];
+function molaAnahtar($t){ return MOLA_TIPLERI[$t]["esdeger"] ?? $t; }
 
 function saatMs($ms){ return date("H:i", (int)($ms / 1000)); }
 
@@ -177,6 +184,7 @@ function gunOzet($v, $acikBitisMs = null){
     $d = $b - $a;
     if ($t === "calisma" || $t === "onhazirlik") $o["calisma"] += $d;
     elseif (isset(MOLA_TIPLERI[$t])) {
+      $t = molaAnahtar($t);
       $o["molalar"][$t] = ($o["molalar"][$t] ?? 0) + $d;
       $o["adet"][$t] = ($o["adet"][$t] ?? 0) + 1;
       $o["liste"][] = ["tip"=>$t, "bas"=>$a, "bit"=>$b];
@@ -193,7 +201,7 @@ function raporMetni($ad, $veri, $detay = false){
   $o = gunOzet($veri);
   $ilk = explode(" ", trim($ad))[0];
   $m = "📋 $ilk bugün " . fmtSaatPHP($o["calisma"]) . " çalıştı";
-  foreach (["yemek","cay","tuvalet"] as $t)
+  foreach (["yemek","ihtiyac"] as $t)
     if (!empty($o["molalar"][$t])) $m .= ", " . fmtSaatPHP($o["molalar"][$t]) . " " . MOLA_TIPLERI[$t]["cikis"];
   if (!empty($o["molalar"]["randevu"])) $m .= ", " . fmtSaatPHP($o["molalar"]["randevu"]) . " online randevuda kaldı";
   $m .= ".";
@@ -253,7 +261,7 @@ function gunlukRaporParcalari($db, $gun){
     $sira = $i < 3 ? ["🥇","🥈","🥉"][$i] : ($i + 1) . ".";
     $b = "$sira <b>" . h($k["ad"]) . "</b> — " . fmtSaatPHP($o["calisma"]) . " çalıştı";
     $molalar = [];
-    foreach (["cay","yemek","tuvalet","randevu"] as $t) if (!empty($o["molalar"][$t])) {
+    foreach (["ihtiyac","yemek","randevu"] as $t) if (!empty($o["molalar"][$t])) {
       $adet = $o["adet"][$t] > 1 ? " ({$o["adet"][$t]}×)" : "";
       $molalar[] = MOLA_TIPLERI[$t]["emoji"] . " " . MOLA_TIPLERI[$t]["ad"] . " " . fmtSaatPHP($o["molalar"][$t]) . $adet;
     }
@@ -785,11 +793,11 @@ function hatirlatmalar($db){
       hatirlatBirKez($db, "hatir:aksam:{$r["id"]}:$gun", $r, $m, "akşam");
     }
     $tip = $v["tip"] ?? "";
-    if ($durum === "molada" && $bas && isset($MOLA_HATIRLATMA_DK[$tip], MOLA_TIPLERI[$tip])) {
+    if ($durum === "molada" && $bas && isset(MOLA_TIPLERI[$tip], $MOLA_HATIRLATMA_DK[molaAnahtar($tip)])) {
       $gecen = $nowMs - $bas;
-      if ($gecen >= (int)$MOLA_HATIRLATMA_DK[$tip] * 60000 && $gecen < 12 * 3600000) {
+      if ($gecen >= (int)$MOLA_HATIRLATMA_DK[molaAnahtar($tip)] * 60000 && $gecen < 12 * 3600000) {
         $mt = MOLA_TIPLERI[$tip];
-        $m = "{$mt["emoji"]} $ilk, " . mb_strtolower($mt["ad"]) . " molan " . saatMs($bas) . "'de başladı, "
+        $m = "{$mt["emoji"]} $ilk, " . tlower($mt["ad"]) . " molan " . saatMs($bas) . "'de başladı, "
            . fmtSaatPHP($gecen) . " oldu ve hâlâ açık görünüyor.\n"
            . "Döndüysen uygulamada ▶ Çalışmaya Devam Et'e basmayı unutma 🙂";
         hatirlatBirKez($db, "hatir:mola:{$r["id"]}:$bas", $r, $m, "mola");
@@ -1226,7 +1234,7 @@ case "mesai_raporu":
       $a=(int)($s["bas"]??0);$b=(int)($s["bit"]??0);$t=$s["tip"]??"";
       if(!$a||!$b||$b<$a)continue;$dur=$b-$a;
       if(isset($tipWork[$t]))$cal+=$dur;
-      if($t==="cay")$cay+=$dur;
+      if(molaAnahtar($t)==="ihtiyac")$cay+=$dur; // cay_ms: ihtiyaç molası (eski çay/tuvalet dahil)
       if($t==="yemek")$yemek+=$dur;
       if($t==="randevu")$rand+=$dur;
       $first=$first===null?min($a,$b):min($first,$a,$b);$last=$last===null?max($a,$b):max($last,$a,$b);

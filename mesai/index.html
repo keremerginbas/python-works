@@ -403,8 +403,8 @@ h3.sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#D4A
 .mini-stats small{display:block;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
 .mini-stats b{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px}
 
-/* Mola menüsü: 2×2 kutucuk */
-.menu{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:9px;background:#0F1531cc}
+/* Mola menüsü: 3 kutucuk (İhtiyaç · Yemek · Online Randevu) */
+.menu{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:9px;background:#0F1531cc}
 .menu button{flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;
   padding:16px 8px;border-radius:14px;border:1px solid var(--line-soft)!important;background:linear-gradient(170deg,var(--card-hi),var(--card));
   transition:transform .15s,border-color .15s,background .15s}
@@ -759,12 +759,17 @@ async function sunucudanYukle(){
 
 /* ---------- Yapılandırma ---------- */
 const ROL = { onBas: 9, onBit: 10, not: "Yapılandır ve planlandır" };
+/* Çay ve tuvalet molası kaldırıldı → tek "İhtiyaç Molası". Eski kayıtlardaki cay/tuvalet
+   segmentleri menüde görünmez, ihtiyaç molası olarak gösterilir ve toplanır. */
 const MOLA = {
-  randevu: { ad: "Online Randevu", emoji: "🎥", renk: "#5B9BE6", sayilir: true },
-  cay:     { ad: "Çay Molası",     emoji: "☕", renk: "#D4AF6E", sayilir: false },
+  ihtiyac: { ad: "İhtiyaç Molası", emoji: "☕", renk: "#D4AF6E", sayilir: false },
   yemek:   { ad: "Yemek Molası",   emoji: "🍽", renk: "#E0764E", sayilir: false },
-  tuvalet: { ad: "Tuvalet Molası", emoji: "🚻", renk: "#E0764E", sayilir: false },
+  randevu: { ad: "Online Randevu", emoji: "🎥", renk: "#5B9BE6", sayilir: true },
+  cay:     { ad: "İhtiyaç Molası", emoji: "☕", renk: "#D4AF6E", sayilir: false, esdeger: "ihtiyac" },
+  tuvalet: { ad: "İhtiyaç Molası", emoji: "☕", renk: "#D4AF6E", sayilir: false, esdeger: "ihtiyac" },
 };
+const molaAnahtar = (id) => (MOLA[id] && MOLA[id].esdeger) || id;
+const kucuk = (s) => s.toLocaleLowerCase("tr-TR");
 const STIL = {
   onhazirlik: { renk: "#9C8CE8", emoji: "📋" },
   calisma:    { renk: "#3DBF7A", emoji: "⏱" },
@@ -796,7 +801,7 @@ const toplamlar = () => {
   for (const s of S.segs) {
     const d = s.bit - s.bas;
     if (s.tip==="calisma"||s.tip==="onhazirlik") t.calisma+=d;
-    else { t.molalar[s.tip]=(t.molalar[s.tip]||0)+d; MOLA[s.tip].sayilir ? t.calisma+=d : t.mola+=d; }
+    else if (MOLA[s.tip]) { const k=molaAnahtar(s.tip); t.molalar[k]=(t.molalar[k]||0)+d; MOLA[s.tip].sayilir ? t.calisma+=d : t.mola+=d; }
   }
   return t;
 };
@@ -872,7 +877,7 @@ function molayaCik(id){ S.bas=segKapat(); S.tip=id; S.durum="molada"; menuAcik=f
 function devam(){
   const m = S.tip ? MOLA[S.tip] : null, sure = S.bas ? Date.now()-S.bas : 0;
   S.bas=segKapat(); S.tip=null; S.durum="calisiyor"; kaydet(true); ciz();
-  if (m) bildir(`▶️ ${fmtSaat(sure)} ${m.ad.toLowerCase()}${m.sayilir?'dan':'ndan'} döndün · ekibe bildiriliyor`);
+  if (m) bildir(`▶️ ${fmtSaat(sure)} ${kucuk(m.ad)}${m.sayilir?'dan':'ndan'} döndün · ekibe bildiriliyor`);
 }
 function sonlandir(){
   konumIsit(); // onay penceresi açıkken konum hazırlansın
@@ -897,7 +902,7 @@ function toggleMenu(){ menuAcik=!menuAcik; ciz(); }
 function telegramMesaj(){
   const t=toplamlar();
   let m=`📋 ${esc(OT ? ilkAd(OT.ad) : "Çalışan")} bugün ${fmtSaat(t.calisma)} çalıştı`;
-  for (const id of ["yemek","cay","tuvalet"]) if (t.molalar[id]) m+=`, ${fmtSaat(t.molalar[id])} ${MOLA[id].ad.toLowerCase()}na çıktı`;
+  for (const id of ["yemek","ihtiyac"]) if (t.molalar[id]) m+=`, ${fmtSaat(t.molalar[id])} ${kucuk(MOLA[id].ad)}na çıktı`;
   if (t.molalar.randevu) m+=`, ${fmtSaat(t.molalar.randevu)} online randevuda kaldı`;
   m+=".";
   if (S.segs.length) m+=`<br>🕘 ${saat(S.segs[0].bas)} – ${saat(S.segs[S.segs.length-1].bit)} · ${t.mola ? "toplam mola "+fmtSaat(t.mola) : "mola yok"}`;
@@ -927,7 +932,7 @@ const canliToplam = () => {
   for (const s of canliSegler()){
     const d = s.bit - s.bas; if (d<=0) continue;
     if (s.tip==="calisma"||s.tip==="onhazirlik") t.calisma+=d;
-    else if (MOLA[s.tip]) { t.molalar[s.tip]=(t.molalar[s.tip]||0)+d; t.adet[s.tip]=(t.adet[s.tip]||0)+1; MOLA[s.tip].sayilir ? t.calisma+=d : t.mola+=d; }
+    else if (MOLA[s.tip]) { const k=molaAnahtar(s.tip); t.molalar[k]=(t.molalar[k]||0)+d; t.adet[k]=(t.adet[k]||0)+1; MOLA[s.tip].sayilir ? t.calisma+=d : t.mola+=d; }
   }
   return t;
 };
@@ -1013,7 +1018,7 @@ function ciz(){
   if (S.durum==="calisiyor"){
     b=`<button class="btn btn-pause${menuAcik?" open":""}" onclick="toggleMenu()">${menuAcik?"✕ Vazgeç":"⏸ Molaya Çık"}</button>`;
     if (menuAcik){
-      b+=`<div class="menu">`+Object.entries(MOLA).map(([id,m])=>
+      b+=`<div class="menu">`+Object.entries(MOLA).filter(([,m])=>!m.esdeger).map(([id,m])=>
         `<button onclick="molayaCik('${id}')" style="--mc:${m.renk}">
           <span class="mi" style="background:${m.renk}1a;color:${m.renk}">${m.emoji}</span>
           <span class="t">${m.ad}</span>
@@ -1205,7 +1210,7 @@ const SABAH_SOZLERI = [
   ["🌞", "Erken kalkan yol alır, mesaisini başlatan sıralamada yükselir."],
   ["💪", "Güzel bir gün geçirmeni dileriz. Şimdiden kolay gelsin, iyi çalışmalar!"],
   ["🍀", "Bugün şans senden yana. Müşteriler de öyle olsun inşallah 🤞"],
-  ["🎯", "Hedef: 8 saat, bol satış, sıfır stres. Çay molası da serbest ☕"],
+  ["🎯", "Hedef: 8 saat, bol satış, sıfır stres. Molalar da serbest ☕"],
 ];
 const KAPAT_SAKALARI = [
   "Çıkarken mesaiyi kapatmayı unutma, yoksa sistem seni gece yarısı hâlâ çalışıyor sanar 😄",

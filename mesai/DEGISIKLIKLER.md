@@ -1,3 +1,14 @@
+# XRE Mesai — 5.3 Tek "İhtiyaç Molası"
+
+- Çay ve tuvalet molası kaldırıldı, yerine tek **☕ İhtiyaç Molası** geldi.
+  Mola menüsü: İhtiyaç Molası · Yemek Molası · Online Randevu.
+- Telegram: "ihtiyaç molasına çıktı" / "ihtiyaç molasından döndü"; akşam raporunda "☕ İhtiyaç".
+- Geçmiş kayıtlardaki çay ve tuvalet molaları silinmedi; raporlarda, sıralamada ve
+  uygulamada **İhtiyaç Molası** olarak birleştirilip gösterilir. Güncelleme anında çay
+  molasında olan kişi normal şekilde döner.
+- Uzun mola hatırlatması: ihtiyaç molası 30 dk, yemek 75 dk (`$MOLA_HATIRLATMA_DK`).
+- `sw.js` v20 (açık sayfalar kendiliğinden güncellenir).
+
 # XRE Mesai — 5.2 Güncellemeler herkese ulaşsın + "bağlı" düzeltmesi
 
 - **Site yenilenmiyordu:** Service worker sayfayı "önce önbellek" ile açıyordu; yeni sürüm ancak

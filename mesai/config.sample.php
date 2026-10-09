@@ -63,7 +63,7 @@ $CRON_ANAHTAR = "";
    Mesaisi bu saatte hâlâ açık olana "kapatmayı unutma" (false = kapalı): */
 $HATIRLATMA_SAAT = "18:05";
 /* Bu kadar dakika açık kalan molaya hatırlatma: */
-$MOLA_HATIRLATMA_DK = ["cay"=>30, "tuvalet"=>20, "yemek"=>75];
+$MOLA_HATIRLATMA_DK = ["ihtiyac"=>30, "yemek"=>75];
 /* Hatırlatma mesajındaki "uygulamayı aç" düğmesinin adresi: */
 $UYGULAMA_URL = "https://xrex.com.tr/mesai/";
 
