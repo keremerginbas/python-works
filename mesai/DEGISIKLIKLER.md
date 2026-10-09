@@ -1,3 +1,11 @@
+# XRE Mesai — 5.4 Yeni logo
+
+- Logo "X Real Estate Türkiye" (şeffaf arka plan) ile değiştirildi: `logo-v2.png`
+  (giriş ekranı, uygulama başlığı, yönetim paneli). Yeni dosya adı sayesinde eski logo
+  önbellekte takılı kalmaz. `sw.js` v21.
+- Bitrix senkronu bu sürümlerde değişmedi; uçtan uca test: başlat → OPENED, ihtiyaç molası →
+  PAUSED, dönüş → OPENED, bitir → CLOSED (+ mola dökümlü rapor).
+
 # XRE Mesai — 5.3 Tek "İhtiyaç Molası"
 
 - Çay ve tuvalet molası kaldırıldı, yerine tek **☕ İhtiyaç Molası** geldi.

@@ -1,5 +1,5 @@
-const CACHE = "xre-mesai-v20";
-const ASSETS = ["./", "./index.html", "./manifest.json", "./logo.png", "./icon-192-v2.png", "./icon-512-v2.png"];
+const CACHE = "xre-mesai-v21";
+const ASSETS = ["./", "./index.html", "./manifest.json", "./logo-v2.png", "./icon-192-v2.png", "./icon-512-v2.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" })))));
