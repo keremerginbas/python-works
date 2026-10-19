@@ -1,5 +1,5 @@
-const CACHE = "xre-mesai-v22";
-const ASSETS = ["./", "./index.html", "./manifest.json", "./logo-v2.png", "./icon-192-v2.png", "./icon-512-v2.png"];
+const CACHE = "xre-mesai-v23";
+const ASSETS = ["./", "./index.html", "./manifest.json", "./logo-v3.png", "./icon-192-v2.png", "./icon-512-v2.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" })))));
@@ -28,7 +28,8 @@ self.addEventListener("fetch", (e) => {
   const html = req.mode === "navigate" || req.destination === "document" || /\/(index\.html)?(\?.*)?$/.test(new URL(req.url).pathname);
   if (html) {
     e.respondWith(
-      fetch(req, { cache: "no-store" }).then((res) => {
+      // "no-cache": sunucuya sorar; sayfa değişmediyse 304 döner, gövde yeniden inmez (trafik tasarrufu)
+      fetch(req, { cache: "no-cache" }).then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put("./index.html", copy)); }
         return res;
       }).catch(() => caches.match("./index.html").then((hit) => hit || caches.match("./")))

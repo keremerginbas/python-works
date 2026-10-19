@@ -1,3 +1,15 @@
+# XRE Mesai — 5.6 Trafik (bandwidth) tasarrufu
+
+509 "Bandwidth Limit Exceeded" = hosting hesabının aylık trafik kotası doldu (tüm site kapanır).
+Kotayı WHM'den yükseltin; uygulama tarafında gereksiz trafik azaltıldı:
+- **Sayfa her açılışta baştan inmiyor:** service worker sayfayı önbelleği atlayarak (`no-store`)
+  çekiyordu → artık `no-cache`: sayfa değişmediyse sunucu 304 döner, 81 KB yeniden inmez.
+- **Sıkıştırma** (`.htaccess`, mod_deflate): sayfa 81 KB → ~25 KB, API yanıtları da küçülür.
+- **Kalp atışı seyreltildi:** her dakika yerine sayfa görünürken 2 dk'da bir, sekme arka plandayken
+  10 dk'da bir. Başlat/mola/dönüş/bitir gibi değişiklikler yine anında gönderilir.
+- **Uzun önbellek:** logo, ikon, video, poster 1 yıl telefonda saklanır (adı değişince yenilenir).
+- Logo küçültüldü: `logo-v3.png` 51 KB → 8 KB (görünüm aynı). `sw.js` v23.
+
 # XRE Mesai — 5.5 Giriş ekranında arka plan videosu
 
 - Giriş ekranının arka planında sessiz, döngülü video. Kartın okunabilmesi için üstünde
